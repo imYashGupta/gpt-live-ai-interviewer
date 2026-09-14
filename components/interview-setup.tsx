@@ -1,8 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
 import { LIVE_VOICES } from "@/lib/types";
+import { questionCountForDuration } from "@/lib/question-plan";
 import type { Difficulty, InterviewConfig, LiveVoice } from "@/lib/types";
 
 const sampleConfig: InterviewConfig = {
@@ -11,6 +13,7 @@ const sampleConfig: InterviewConfig = {
   durationMinutes: 10,
   difficulty: "senior",
   voice: "willow",
+  followUpsEnabled: true,
   jobDescription:
     "Lead backend development with PHP and Laravel. Design reliable APIs and relational data models, operate queue-based workloads, debug production issues, and communicate architecture trade-offs clearly.",
   candidateNotes:
@@ -19,10 +22,17 @@ const sampleConfig: InterviewConfig = {
 
 interface InterviewSetupProps {
   initialConfig?: InterviewConfig;
-  onStart: (config: InterviewConfig) => void;
+  isGenerating: boolean;
+  error: string | null;
+  onGenerate: (config: InterviewConfig) => void;
 }
 
-export function InterviewSetup({ initialConfig, onStart }: InterviewSetupProps) {
+export function InterviewSetup({
+  initialConfig,
+  isGenerating,
+  error,
+  onGenerate,
+}: InterviewSetupProps) {
   const [config, setConfig] = useState<InterviewConfig>(
     initialConfig ?? sampleConfig,
   );
@@ -34,8 +44,10 @@ export function InterviewSetup({ initialConfig, onStart }: InterviewSetupProps) 
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onStart(config);
+    onGenerate(config);
   };
+
+  const questionCount = questionCountForDuration(config.durationMinutes);
 
   return (
     <main className="setup-shell">
@@ -177,6 +189,30 @@ export function InterviewSetup({ initialConfig, onStart }: InterviewSetupProps) 
             </div>
           </fieldset>
 
+          <div
+            className="followup-field"
+            role="group"
+            aria-labelledby="followup-title"
+          >
+            <div>
+              <strong id="followup-title">Adaptive follow-ups</strong>
+              <p>
+                Add 1–2 deeper prompts to about 30–40% of the {questionCount} core
+                questions.
+              </p>
+            </div>
+            <label className="followup-switch">
+              <input
+                type="checkbox"
+                checked={config.followUpsEnabled}
+                onChange={(event) => update("followUpsEnabled", event.target.checked)}
+                aria-label="Generate adaptive follow-up questions"
+              />
+              <span aria-hidden="true" />
+              <strong>{config.followUpsEnabled ? "On" : "Off"}</strong>
+            </label>
+          </div>
+
           <label>
             <span>Candidate or résumé notes <em>Optional</em></span>
             <textarea
@@ -188,11 +224,14 @@ export function InterviewSetup({ initialConfig, onStart }: InterviewSetupProps) 
           </label>
 
           <div className="start-row">
-            <p><MicIcon /> You’ll be asked for microphone access</p>
-            <button className="primary-button" type="submit">
-              Start interview <ArrowIcon />
+            <p><SparkIcon /> Luna will draft {questionCount} questions for review</p>
+            <button className="primary-button" type="submit" disabled={isGenerating}>
+              {isGenerating ? "Generating plan…" : "Generate interview plan"}
+              {!isGenerating && <ArrowIcon />}
             </button>
           </div>
+
+          {error && <p className="setup-error" role="alert">{error}</p>}
         </form>
       </section>
 
@@ -214,11 +253,11 @@ function LockIcon() {
   );
 }
 
-function MicIcon() {
+function SparkIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+      <path d="m12 3 1.5 4.1L18 9l-4.5 1.9L12 15l-1.5-4.1L6 9l4.5-1.9L12 3Z" />
+      <path d="m18.5 15 .7 1.8L21 17.5l-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
     </svg>
   );
 }

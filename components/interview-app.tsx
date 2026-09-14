@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { InterviewRoom } from "@/components/interview-room";
+import { InterviewPlanReview } from "@/components/interview-plan-review";
 import { InterviewSetup } from "@/components/interview-setup";
+import { validateInterviewPlan } from "@/lib/question-plan";
 import type {
   ConnectionStatus,
   DebugEvent,
   InterviewConfig,
+  InterviewPlan,
+  InterviewPlanResponse,
   LiveSessionResponse,
   TranscriptEntry,
 } from "@/lib/types";
@@ -18,10 +22,14 @@ const CLOSE_TIMEOUT_MS = 15_000;
 const MAX_DEBUG_EVENTS = 120;
 
 type LiveMessage = Record<string, unknown> & { type?: string };
+type AppView = "setup" | "review" | "room";
 
 export function InterviewApp() {
-  const [roomOpen, setRoomOpen] = useState(false);
+  const [view, setView] = useState<AppView>("setup");
   const [config, setConfig] = useState<InterviewConfig | null>(null);
+  const [plan, setPlan] = useState<InterviewPlan | null>(null);
+  const [planGenerating, setPlanGenerating] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +227,7 @@ export function InterviewApp() {
   );
 
   const connect = useCallback(
-    async (interviewConfig: InterviewConfig) => {
+    async (interviewConfig: InterviewConfig, interviewPlan: InterviewPlan) => {
       cleanupResources();
       finalizingRef.current = false;
       updateStatus("connecting");
@@ -308,7 +316,11 @@ export function InterviewApp() {
         const response = await fetch("/api/live/session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sdp, interview: interviewConfig }),
+          body: JSON.stringify({
+            sdp,
+            interview: interviewConfig,
+            plan: interviewPlan,
+          }),
         });
         const result = (await response.json().catch(() => null)) as
           | LiveSessionResponse
@@ -366,14 +378,54 @@ export function InterviewApp() {
     [cleanupResources, handleServerEvent, updateStatus],
   );
 
-  const startInterview = useCallback(
-    (nextConfig: InterviewConfig) => {
-      setConfig(nextConfig);
-      setRoomOpen(true);
-      void connect(nextConfig);
-    },
-    [connect],
-  );
+  const generatePlan = useCallback(async (nextConfig: InterviewConfig) => {
+    setConfig(nextConfig);
+    setPlanGenerating(true);
+    setPlanError(null);
+
+    try {
+      const response = await fetch("/api/interview-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interview: nextConfig }),
+      });
+      const result = (await response.json().catch(() => null)) as
+        | InterviewPlanResponse
+        | { error?: string }
+        | null;
+
+      if (!response.ok) {
+        throw new Error(
+          result && "error" in result && result.error
+            ? result.error
+            : "The server could not generate an interview plan.",
+        );
+      }
+
+      const nextPlan =
+        result && "plan" in result ? validateInterviewPlan(result.plan) : null;
+      if (!nextPlan) {
+        throw new Error("The server returned an invalid interview plan.");
+      }
+
+      setPlan(nextPlan);
+      setView("review");
+    } catch (generationError) {
+      setPlanError(
+        generationError instanceof Error
+          ? generationError.message
+          : "The interview plan could not be generated.",
+      );
+    } finally {
+      setPlanGenerating(false);
+    }
+  }, []);
+
+  const startInterview = useCallback(() => {
+    if (!config || !plan) return;
+    setView("room");
+    void connect(config, plan);
+  }, [config, connect, plan]);
 
   const endInterview = useCallback(() => {
     if (statusRef.current === "ending" || statusRef.current === "ended") return;
@@ -431,22 +483,48 @@ export function InterviewApp() {
     }
   }, [mutePending, muted, sendEvent]);
 
-  const returnToSetup = useCallback(() => {
+  const returnToPlan = useCallback(() => {
     if (statusRef.current === "connected" || statusRef.current === "ending") {
       endInterview();
     } else {
       cleanupResources();
     }
-    setRoomOpen(false);
-  }, [cleanupResources, endInterview]);
+    setView(plan ? "review" : "setup");
+  }, [cleanupResources, endInterview, plan]);
 
-  if (!roomOpen || !config) {
-    return <InterviewSetup initialConfig={config ?? undefined} onStart={startInterview} />;
+  if (view === "setup" || !config || !plan) {
+    return (
+      <InterviewSetup
+        initialConfig={config ?? undefined}
+        isGenerating={planGenerating}
+        error={planError}
+        onGenerate={(nextConfig) => void generatePlan(nextConfig)}
+      />
+    );
+  }
+
+  if (view === "review") {
+    return (
+      <InterviewPlanReview
+        config={config}
+        plan={plan}
+        isGenerating={planGenerating}
+        error={planError}
+        onChange={setPlan}
+        onRegenerate={() => void generatePlan(config)}
+        onStart={startInterview}
+        onBack={() => {
+          setPlanError(null);
+          setView("setup");
+        }}
+      />
+    );
   }
 
   return (
     <InterviewRoom
       config={config}
+      plan={plan}
       status={status}
       sessionId={sessionId}
       error={error}
@@ -462,8 +540,8 @@ export function InterviewApp() {
       audioRef={audioRef}
       onToggleMute={toggleMute}
       onEnd={endInterview}
-      onRetry={() => void connect(config)}
-      onBack={returnToSetup}
+      onRetry={() => void connect(config, plan)}
+      onBack={returnToPlan}
       onEnableAudio={() => {
         audioRef.current?.play().then(
           () => setPlaybackBlocked(false),

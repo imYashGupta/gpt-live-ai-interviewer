@@ -2,8 +2,14 @@ import OpenAI from "openai";
 import { NextResponse } from "next/server";
 
 import { buildInterviewPrompt } from "@/lib/interview-prompt";
+import { questionCountForDuration, validateInterviewPlan } from "@/lib/question-plan";
 import { LIVE_VOICES } from "@/lib/types";
-import type { Difficulty, InterviewConfig, LiveVoice } from "@/lib/types";
+import type {
+  Difficulty,
+  InterviewConfig,
+  InterviewPlan,
+  LiveVoice,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -11,7 +17,7 @@ const difficulties = new Set<Difficulty>(["junior", "mid", "senior"]);
 const voices = new Set<LiveVoice>(LIVE_VOICES);
 
 function validateBody(value: unknown):
-  | { ok: true; sdp: string; interview: InterviewConfig }
+  | { ok: true; sdp: string; interview: InterviewConfig; plan: InterviewPlan }
   | { ok: false; message: string } {
   if (!value || typeof value !== "object") {
     return { ok: false, message: "A JSON request body is required." };
@@ -30,11 +36,22 @@ function validateBody(value: unknown):
     return { ok: false, message: "Interview configuration is required." };
   }
 
-  const requiredStrings = ["candidateName", "role", "jobDescription"] as const;
-  for (const key of requiredStrings) {
-    if (typeof interview[key] !== "string" || !interview[key].trim()) {
-      return { ok: false, message: `${key} is required.` };
-    }
+  if (
+    typeof interview.candidateName !== "string" ||
+    !interview.candidateName.trim() ||
+    typeof interview.role !== "string" ||
+    !interview.role.trim() ||
+    typeof interview.jobDescription !== "string" ||
+    !interview.jobDescription.trim()
+  ) {
+    return { ok: false, message: "Candidate name, role, and job description are required." };
+  }
+  if (
+    interview.candidateName.length > 120 ||
+    interview.role.length > 180 ||
+    interview.jobDescription.length > 6_000
+  ) {
+    return { ok: false, message: "Interview context exceeds the allowed length." };
   }
 
   if (
@@ -57,11 +74,29 @@ function validateBody(value: unknown):
   ) {
     return { ok: false, message: "A valid interviewer voice is required." };
   }
+  if (typeof interview.followUpsEnabled !== "boolean") {
+    return { ok: false, message: "A follow-up preference is required." };
+  }
   if (
     interview.candidateNotes !== undefined &&
-    typeof interview.candidateNotes !== "string"
+    (typeof interview.candidateNotes !== "string" ||
+      interview.candidateNotes.length > 3_000)
   ) {
     return { ok: false, message: "Candidate notes must be text." };
+  }
+
+  const plan = validateInterviewPlan(body.plan);
+  if (
+    !plan ||
+    plan.questions.length !== questionCountForDuration(interview.durationMinutes)
+  ) {
+    return { ok: false, message: "A valid reviewed interview plan is required." };
+  }
+  if (
+    interview.followUpsEnabled === false &&
+    plan.questions.some((question) => question.followUps.length > 0)
+  ) {
+    return { ok: false, message: "Follow-ups are disabled for this interview." };
   }
 
   return {
@@ -74,8 +109,10 @@ function validateBody(value: unknown):
       durationMinutes: interview.durationMinutes,
       difficulty: interview.difficulty as Difficulty,
       voice: interview.voice as LiveVoice,
+      followUpsEnabled: interview.followUpsEnabled,
       candidateNotes: (interview.candidateNotes as string | undefined) ?? "",
     },
+    plan,
   };
 }
 
@@ -107,7 +144,7 @@ export async function POST(request: Request) {
     const result = await openai.live.create({
       session: {
         model: "gpt-live-1",
-        instructions: buildInterviewPrompt(parsed.interview),
+        instructions: buildInterviewPrompt(parsed.interview, parsed.plan),
         audio: { output: { voice: parsed.interview.voice } },
         store: false,
       },

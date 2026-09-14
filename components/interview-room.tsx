@@ -8,12 +8,14 @@ import type {
   ConnectionStatus,
   DebugEvent,
   InterviewConfig,
+  InterviewPlan,
   TranscriptEntry,
 } from "@/lib/types";
 import { GPT_LIVE_PRICE_USD_PER_MINUTE } from "@/lib/types";
 
 interface InterviewRoomProps {
   config: InterviewConfig;
+  plan: InterviewPlan;
   status: ConnectionStatus;
   sessionId: string | null;
   error: string | null;
@@ -45,6 +47,7 @@ const statusLabels: Record<ConnectionStatus, string> = {
 
 export function InterviewRoom({
   config,
+  plan,
   status,
   sessionId,
   error,
@@ -216,6 +219,7 @@ export function InterviewRoom({
         <SessionCostSummary
           elapsedSeconds={elapsedSeconds}
           usageSeconds={usageSeconds}
+          plan={plan}
         />
       )}
 
@@ -233,12 +237,15 @@ export function InterviewRoom({
 function SessionCostSummary({
   elapsedSeconds,
   usageSeconds,
+  plan,
 }: {
   elapsedSeconds: number;
   usageSeconds: number | null;
+  plan: InterviewPlan;
 }) {
   const billedSeconds = usageSeconds ?? elapsedSeconds;
   const sessionCost = (billedSeconds / 60) * GPT_LIVE_PRICE_USD_PER_MINUTE;
+  const totalCost = sessionCost + plan.generation.estimatedCostUsd;
   const measured = usageSeconds !== null;
 
   return (
@@ -248,7 +255,7 @@ function SessionCostSummary({
           <p className="panel-kicker">Session complete</p>
           <h2 id="cost-summary-title">Usage &amp; estimated cost</h2>
         </div>
-        <strong>{formatCurrency(sessionCost)}</strong>
+        <strong>{formatCurrency(totalCost)}</strong>
       </div>
 
       <div className="cost-breakdown">
@@ -257,24 +264,30 @@ function SessionCostSummary({
           <strong>{formatUsageDuration(billedSeconds)}</strong>
         </div>
         <div>
-          <span>GPT-Live 1 rate</span>
-          <strong>$0.05 / minute</strong>
-        </div>
-        <div>
           <span>Live session</span>
           <strong>{formatCurrency(sessionCost)}</strong>
+          <small>$0.05 / minute, billed per second</small>
         </div>
         <div>
-          <span>Backend models &amp; tools</span>
+          <span>Luna question plan</span>
+          <strong>{formatCurrency(plan.generation.estimatedCostUsd)}</strong>
+          <small>
+            {plan.generation.inputTokens.toLocaleString()} input +{" "}
+            {plan.generation.outputTokens.toLocaleString()} output tokens
+          </small>
+        </div>
+        <div>
+          <span>Other backend models &amp; tools</span>
           <strong>None used</strong>
         </div>
       </div>
 
       <p className="cost-note">
         {measured
-          ? "Calculated from the final Live usage event."
-          : "Final usage was unavailable, so this uses elapsed browser time."}
-        {" "}Your OpenAI dashboard remains the billing source of truth.
+          ? "Live cost uses the final server usage event."
+          : "Final Live usage was unavailable, so Live cost uses elapsed browser time."}
+        {" "}Luna cost uses the recorded response tokens. Your OpenAI dashboard
+        remains the billing source of truth.
       </p>
     </section>
   );

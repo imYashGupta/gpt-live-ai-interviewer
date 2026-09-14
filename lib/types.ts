@@ -36,7 +36,34 @@ export interface InterviewConfig {
   durationMinutes: number;
   difficulty: Difficulty;
   voice: LiveVoice;
+  followUpsEnabled: boolean;
   candidateNotes: string;
+}
+
+export interface InterviewQuestion {
+  id: string;
+  topic: string;
+  question: string;
+  intent: string;
+  followUps: string[];
+}
+
+export interface PlanGenerationUsage {
+  model: "gpt-5.6-luna";
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number;
+}
+
+export interface InterviewPlan {
+  summary: string;
+  questions: InterviewQuestion[];
+  generation: PlanGenerationUsage;
+}
+
+export interface InterviewPlanResponse {
+  plan: InterviewPlan;
 }
 
 export type ConnectionStatus =

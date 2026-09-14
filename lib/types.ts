@@ -1,4 +1,5 @@
 export type Difficulty = "junior" | "mid" | "senior";
+export type InterviewMode = "ai-led" | "planned";
 
 export const LIVE_VOICES = [
   "alloy",
@@ -30,6 +31,7 @@ export type LiveVoice = (typeof LIVE_VOICES)[number];
 export const GPT_LIVE_PRICE_USD_PER_MINUTE = 0.05;
 
 export interface InterviewConfig {
+  mode: InterviewMode;
   candidateName: string;
   role: string;
   jobDescription: string;

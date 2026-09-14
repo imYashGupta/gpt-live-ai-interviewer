@@ -278,6 +278,89 @@ svg {
   text-transform: uppercase;
 }
 
+.mode-field {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.mode-field legend {
+  display: block;
+  margin-bottom: 9px;
+  color: #3e4945;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.setup-card .mode-option {
+  min-height: 100px;
+  padding: 14px;
+  border: 1px solid #d8d8cf;
+  border-radius: 11px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  position: relative;
+  background: #fbfaf5;
+  cursor: pointer;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.setup-card .mode-option.active {
+  border-color: var(--green);
+  background: var(--green-light);
+  box-shadow: 0 0 0 2px rgba(30, 89, 75, 0.08);
+}
+
+.mode-option input {
+  width: 1px;
+  height: 1px;
+  position: absolute;
+  opacity: 0;
+}
+
+.mode-option input:focus-visible + span {
+  outline: 2px solid var(--green);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.mode-option > span {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.mode-option > span strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.mode-option > span small {
+  color: var(--ink-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.setup-card .mode-option > em {
+  margin: 0;
+  align-self: start;
+  color: #6f7975;
+  font: 620 8px var(--font-geist-mono), monospace;
+  font-style: normal;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.setup-card .mode-option.active > em { color: var(--green); }
+
 .setup-card > label,
 .form-grid {
   margin-top: 22px;
@@ -1659,6 +1742,7 @@ svg {
   .expectation-list p { display: block; }
   .expectation-list small { display: block; margin-top: 3px; }
   .form-grid.two-columns { grid-template-columns: 1fr; }
+  .mode-options { grid-template-columns: 1fr; }
   .setup-card { padding: 24px 20px; border-radius: 18px; }
   .start-row { align-items: stretch; flex-direction: column; }
   .primary-button { width: 100%; }

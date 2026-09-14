@@ -1,9 +1,10 @@
 # GPT-Live-1 AI Interviewer Prototype
 
-A small Next.js prototype for a browser-based technical interview. GPT-5.6 Luna
-creates a duration-aware question plan for review, then `gpt-live-1` conducts the
-approved plan over WebRTC with microphone audio, generated speech, events, and
-captions.
+A small Next.js prototype for browser-based technical interviews with two modes.
+In AI-led mode, `gpt-live-1` controls the interview dynamically. In Plan & review
+mode, GPT-5.6 Luna creates a duration-aware editable question plan before
+`gpt-live-1` conducts it. Both use WebRTC for microphone audio and generated
+speech, plus Live events and captions.
 
 ## Run locally
 
@@ -22,12 +23,12 @@ The API key is read only by `POST /api/interview-plan` and
 
 ## Current scope
 
-The MVP flow lets a reviewer enter a role and job description, generate an
-editable interview plan, and approve it before entering the Live room. Plan sizes
-are paced for spoken answers: 3, 5, 7, 9, or 12 core questions for 5, 10, 15, 20,
-or 30 minutes. Every plan starts with a candidate introduction before moving into
-technical topics. Adaptive follow-ups are on by default and are planned for
-roughly 35% of the core questions after the introduction.
+The MVP offers AI-led and Plan & review modes. AI-led mode skips Luna and gives
+GPT-Live control over question selection, ordering, and depth. Plan & review mode
+generates an editable plan before entering the Live room. Plan sizes are paced
+for spoken answers: 3, 5, 7, 9, or 12 core questions for 5, 10, 15, 20, or 30
+minutes. Both modes start with a candidate introduction before technical topics.
+Adaptive follow-ups are on by default and target roughly 35% of technical topics.
 
 The Live room includes a voice picker with Willow as the default, lightweight
 captions, mute/end controls, connection states, and a raw event panel. When the

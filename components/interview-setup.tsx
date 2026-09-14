@@ -5,9 +5,15 @@ import type { FormEvent } from "react";
 
 import { LIVE_VOICES } from "@/lib/types";
 import { questionCountForDuration } from "@/lib/question-plan";
-import type { Difficulty, InterviewConfig, LiveVoice } from "@/lib/types";
+import type {
+  Difficulty,
+  InterviewConfig,
+  InterviewMode,
+  LiveVoice,
+} from "@/lib/types";
 
 const sampleConfig: InterviewConfig = {
+  mode: "planned",
   candidateName: "Test Candidate",
   role: "Senior Laravel Developer",
   durationMinutes: 10,
@@ -24,14 +30,14 @@ interface InterviewSetupProps {
   initialConfig?: InterviewConfig;
   isGenerating: boolean;
   error: string | null;
-  onGenerate: (config: InterviewConfig) => void;
+  onContinue: (config: InterviewConfig) => void;
 }
 
 export function InterviewSetup({
   initialConfig,
   isGenerating,
   error,
-  onGenerate,
+  onContinue,
 }: InterviewSetupProps) {
   const [config, setConfig] = useState<InterviewConfig>(
     initialConfig ?? sampleConfig,
@@ -44,7 +50,7 @@ export function InterviewSetup({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    onGenerate(config);
+    onContinue(config);
   };
 
   const questionCount = questionCountForDuration(config.durationMinutes);
@@ -104,6 +110,53 @@ export function InterviewSetup({
             </div>
             <span className="sample-badge">Sample ready</span>
           </div>
+
+          <fieldset className="mode-field">
+            <legend>Interview mode</legend>
+            <div className="mode-options">
+              {(
+                [
+                  {
+                    value: "ai-led",
+                    title: "AI-led",
+                    description:
+                      "GPT-Live chooses questions and adapts the flow in real time.",
+                    badge: "Fast demo",
+                  },
+                  {
+                    value: "planned",
+                    title: "Plan & review",
+                    description:
+                      "Luna drafts questions you can edit before the interview.",
+                    badge: "Customizable",
+                  },
+                ] as const satisfies ReadonlyArray<{
+                  value: InterviewMode;
+                  title: string;
+                  description: string;
+                  badge: string;
+                }>
+              ).map((mode) => (
+                <label
+                  className={`mode-option ${config.mode === mode.value ? "active" : ""}`}
+                  key={mode.value}
+                >
+                  <input
+                    type="radio"
+                    name="interviewMode"
+                    value={mode.value}
+                    checked={config.mode === mode.value}
+                    onChange={() => update("mode", mode.value)}
+                  />
+                  <span>
+                    <strong>{mode.title}</strong>
+                    <small>{mode.description}</small>
+                  </span>
+                  <em>{mode.badge}</em>
+                </label>
+              ))}
+            </div>
+          </fieldset>
 
           <div className="form-grid two-columns">
             <label>
@@ -197,8 +250,9 @@ export function InterviewSetup({
             <div>
               <strong id="followup-title">Adaptive follow-ups</strong>
               <p>
-                Add 1–2 deeper prompts to about 30–40% of the {questionCount} core
-                questions.
+                {config.mode === "planned"
+                  ? `Add 1–2 deeper prompts to about 30–40% of the ${questionCount} core questions.`
+                  : "Let GPT-Live explore about 30–40% of topics more deeply when useful."}
               </p>
             </div>
             <label className="followup-switch">
@@ -224,9 +278,18 @@ export function InterviewSetup({
           </label>
 
           <div className="start-row">
-            <p><SparkIcon /> Luna will draft {questionCount} questions for review</p>
+            <p>
+              <SparkIcon />
+              {config.mode === "planned"
+                ? `Luna will draft ${questionCount} questions for review`
+                : "GPT-Live will shape the interview in real time"}
+            </p>
             <button className="primary-button" type="submit" disabled={isGenerating}>
-              {isGenerating ? "Generating plan…" : "Generate interview plan"}
+              {isGenerating
+                ? "Generating plan…"
+                : config.mode === "planned"
+                  ? "Generate interview plan"
+                  : "Start AI-led interview"}
               {!isGenerating && <ArrowIcon />}
             </button>
           </div>

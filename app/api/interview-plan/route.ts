@@ -61,6 +61,7 @@ function validateConfig(value: unknown): InterviewConfig | null {
   const config = value as Record<string, unknown>;
 
   if (
+    config.mode !== "planned" ||
     typeof config.candidateName !== "string" ||
     !config.candidateName.trim() ||
     config.candidateName.length > 120 ||
@@ -86,6 +87,7 @@ function validateConfig(value: unknown): InterviewConfig | null {
   }
 
   return {
+    mode: "planned",
     candidateName: config.candidateName.trim(),
     role: config.role.trim(),
     jobDescription: config.jobDescription.trim(),

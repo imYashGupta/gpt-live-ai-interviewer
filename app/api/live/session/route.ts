@@ -7,6 +7,7 @@ import { LIVE_VOICES } from "@/lib/types";
 import type {
   Difficulty,
   InterviewConfig,
+  InterviewMode,
   InterviewPlan,
   LiveVoice,
 } from "@/lib/types";
@@ -17,7 +18,12 @@ const difficulties = new Set<Difficulty>(["junior", "mid", "senior"]);
 const voices = new Set<LiveVoice>(LIVE_VOICES);
 
 function validateBody(value: unknown):
-  | { ok: true; sdp: string; interview: InterviewConfig; plan: InterviewPlan }
+  | {
+      ok: true;
+      sdp: string;
+      interview: InterviewConfig;
+      plan: InterviewPlan | null;
+    }
   | { ok: false; message: string } {
   if (!value || typeof value !== "object") {
     return { ok: false, message: "A JSON request body is required." };
@@ -36,6 +42,9 @@ function validateBody(value: unknown):
     return { ok: false, message: "Interview configuration is required." };
   }
 
+  if (interview.mode !== "ai-led" && interview.mode !== "planned") {
+    return { ok: false, message: "A valid interview mode is required." };
+  }
   if (
     typeof interview.candidateName !== "string" ||
     !interview.candidateName.trim() ||
@@ -85,24 +94,28 @@ function validateBody(value: unknown):
     return { ok: false, message: "Candidate notes must be text." };
   }
 
-  const plan = validateInterviewPlan(body.plan);
-  if (
-    !plan ||
-    plan.questions.length !== questionCountForDuration(interview.durationMinutes)
-  ) {
-    return { ok: false, message: "A valid reviewed interview plan is required." };
-  }
-  if (
-    interview.followUpsEnabled === false &&
-    plan.questions.some((question) => question.followUps.length > 0)
-  ) {
-    return { ok: false, message: "Follow-ups are disabled for this interview." };
+  let plan: InterviewPlan | null = null;
+  if (interview.mode === "planned") {
+    plan = validateInterviewPlan(body.plan);
+    if (
+      !plan ||
+      plan.questions.length !== questionCountForDuration(interview.durationMinutes)
+    ) {
+      return { ok: false, message: "A valid reviewed interview plan is required." };
+    }
+    if (
+      interview.followUpsEnabled === false &&
+      plan.questions.some((question) => question.followUps.length > 0)
+    ) {
+      return { ok: false, message: "Follow-ups are disabled for this interview." };
+    }
   }
 
   return {
     ok: true,
     sdp: body.sdp,
     interview: {
+      mode: interview.mode as InterviewMode,
       candidateName: interview.candidateName as string,
       role: interview.role as string,
       jobDescription: interview.jobDescription as string,

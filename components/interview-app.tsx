@@ -227,7 +227,10 @@ export function InterviewApp() {
   );
 
   const connect = useCallback(
-    async (interviewConfig: InterviewConfig, interviewPlan: InterviewPlan) => {
+    async (
+      interviewConfig: InterviewConfig,
+      interviewPlan: InterviewPlan | null,
+    ) => {
       cleanupResources();
       finalizingRef.current = false;
       updateStatus("connecting");
@@ -319,7 +322,7 @@ export function InterviewApp() {
           body: JSON.stringify({
             sdp,
             interview: interviewConfig,
-            plan: interviewPlan,
+            ...(interviewPlan ? { plan: interviewPlan } : {}),
           }),
         });
         const result = (await response.json().catch(() => null)) as
@@ -421,6 +424,23 @@ export function InterviewApp() {
     }
   }, []);
 
+  const continueFromSetup = useCallback(
+    (nextConfig: InterviewConfig) => {
+      setPlanError(null);
+
+      if (nextConfig.mode === "ai-led") {
+        setConfig(nextConfig);
+        setPlan(null);
+        setView("room");
+        void connect(nextConfig, null);
+        return;
+      }
+
+      void generatePlan(nextConfig);
+    },
+    [connect, generatePlan],
+  );
+
   const startInterview = useCallback(() => {
     if (!config || !plan) return;
     setView("room");
@@ -489,21 +509,21 @@ export function InterviewApp() {
     } else {
       cleanupResources();
     }
-    setView(plan ? "review" : "setup");
-  }, [cleanupResources, endInterview, plan]);
+    setView(config?.mode === "planned" && plan ? "review" : "setup");
+  }, [cleanupResources, config?.mode, endInterview, plan]);
 
-  if (view === "setup" || !config || !plan) {
+  if (view === "setup" || !config || (view === "review" && !plan)) {
     return (
       <InterviewSetup
         initialConfig={config ?? undefined}
         isGenerating={planGenerating}
         error={planError}
-        onGenerate={(nextConfig) => void generatePlan(nextConfig)}
+        onContinue={continueFromSetup}
       />
     );
   }
 
-  if (view === "review") {
+  if (view === "review" && plan) {
     return (
       <InterviewPlanReview
         config={config}

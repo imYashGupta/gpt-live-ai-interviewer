@@ -15,7 +15,7 @@ import { GPT_LIVE_PRICE_USD_PER_MINUTE } from "@/lib/types";
 
 interface InterviewRoomProps {
   config: InterviewConfig;
-  plan: InterviewPlan;
+  plan: InterviewPlan | null;
   status: ConnectionStatus;
   sessionId: string | null;
   error: string | null;
@@ -84,7 +84,10 @@ export function InterviewRoom({
 
         <div className="room-title">
           <strong>{config.role}</strong>
-          <span>{config.candidateName} · {capitalize(config.difficulty)}</span>
+          <span>
+            {config.candidateName} · {capitalize(config.difficulty)} ·{" "}
+            {config.mode === "ai-led" ? "AI-led" : "Reviewed plan"}
+          </span>
         </div>
 
         <div className="header-actions">
@@ -241,11 +244,12 @@ function SessionCostSummary({
 }: {
   elapsedSeconds: number;
   usageSeconds: number | null;
-  plan: InterviewPlan;
+  plan: InterviewPlan | null;
 }) {
   const billedSeconds = usageSeconds ?? elapsedSeconds;
   const sessionCost = (billedSeconds / 60) * GPT_LIVE_PRICE_USD_PER_MINUTE;
-  const totalCost = sessionCost + plan.generation.estimatedCostUsd;
+  const planCost = plan?.generation.estimatedCostUsd ?? 0;
+  const totalCost = sessionCost + planCost;
   const measured = usageSeconds !== null;
 
   return (
@@ -270,11 +274,20 @@ function SessionCostSummary({
         </div>
         <div>
           <span>Luna question plan</span>
-          <strong>{formatCurrency(plan.generation.estimatedCostUsd)}</strong>
-          <small>
-            {plan.generation.inputTokens.toLocaleString()} input +{" "}
-            {plan.generation.outputTokens.toLocaleString()} output tokens
-          </small>
+          {plan ? (
+            <>
+              <strong>{formatCurrency(planCost)}</strong>
+              <small>
+                {plan.generation.inputTokens.toLocaleString()} input +{" "}
+                {plan.generation.outputTokens.toLocaleString()} output tokens
+              </small>
+            </>
+          ) : (
+            <>
+              <strong>Not used</strong>
+              <small>AI-led mode skips plan generation</small>
+            </>
+          )}
         </div>
         <div>
           <span>Other backend models &amp; tools</span>
@@ -286,8 +299,8 @@ function SessionCostSummary({
         {measured
           ? "Live cost uses the final server usage event."
           : "Final Live usage was unavailable, so Live cost uses elapsed browser time."}
-        {" "}Luna cost uses the recorded response tokens. Your OpenAI dashboard
-        remains the billing source of truth.
+        {plan && " Luna cost uses the recorded response tokens."} Your OpenAI
+        dashboard remains the billing source of truth.
       </p>
     </section>
   );

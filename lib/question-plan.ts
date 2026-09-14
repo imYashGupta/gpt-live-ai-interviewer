@@ -34,6 +34,18 @@ export function normalizeQuestions(
     followUps: question.followUps.slice(0, 2),
   }));
 
+  if (normalized.length > 0) {
+    normalized[0] = {
+      id: "question_1",
+      topic: "Candidate introduction",
+      question:
+        "To get us started, could you tell me about yourself, your recent experience, and what interested you in this role?",
+      intent:
+        "Helps the candidate settle in and establishes relevant background and motivation before technical topics.",
+      followUps: [],
+    };
+  }
+
   if (!followUpsEnabled) {
     return normalized.map((question) => ({ ...question, followUps: [] }));
   }
@@ -41,17 +53,17 @@ export function normalizeQuestions(
   const target = followUpTargetForQuestionCount(questionCount);
   const selected = normalized
     .map((question, index) => ({ question, index }))
-    .filter(({ question }) => question.followUps.length > 0)
+    .filter(({ question, index }) => index > 0 && question.followUps.length > 0)
     .slice(0, target);
   const selectedIndexes = new Set(selected.map(({ index }) => index));
 
-  for (let index = 0; selectedIndexes.size < target && index < normalized.length; index += 1) {
+  for (let index = 1; selectedIndexes.size < target && index < normalized.length; index += 1) {
     selectedIndexes.add(index);
   }
 
   return normalized.map((question, index) => ({
     ...question,
-    followUps: selectedIndexes.has(index)
+    followUps: index > 0 && selectedIndexes.has(index)
       ? question.followUps.length > 0
         ? question.followUps
         : [`Can you walk me through a concrete example involving ${question.topic}?`]

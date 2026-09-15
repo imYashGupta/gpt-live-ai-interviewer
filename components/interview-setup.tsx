@@ -13,11 +13,11 @@ import type {
 } from "@/lib/types";
 
 const sampleConfig: InterviewConfig = {
-  mode: "planned",
+  mode: "ai-led",
   candidateName: "Test Candidate",
   role: "Senior Laravel Developer",
-  durationMinutes: 10,
-  difficulty: "senior",
+  durationMinutes: 5,
+  difficulty: "mid",
   voice: "willow",
   followUpsEnabled: true,
   jobDescription:

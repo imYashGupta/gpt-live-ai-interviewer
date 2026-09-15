@@ -23,6 +23,7 @@ const MAX_DEBUG_EVENTS = 120;
 
 type LiveMessage = Record<string, unknown> & { type?: string };
 type AppView = "setup" | "review" | "room";
+type InterviewLogReference = { id: string; openaiSessionId: string };
 
 export function InterviewApp() {
   const [view, setView] = useState<AppView>("setup");
@@ -53,6 +54,7 @@ export function InterviewApp() {
   const startedAtRef = useRef<number | null>(null);
   const finalizingRef = useRef(false);
   const statusRef = useRef<ConnectionStatus>("idle");
+  const interviewLogRef = useRef<InterviewLogReference | null>(null);
 
   const updateStatus = useCallback((nextStatus: ConnectionStatus) => {
     statusRef.current = nextStatus;
@@ -203,9 +205,10 @@ export function InterviewApp() {
         }
         case "session.closed": {
           const usage = event.usage as Record<string, unknown> | undefined;
-          if (typeof usage?.seconds === "number") {
-            setUsageSeconds(Math.max(0, usage.seconds));
-          }
+          const actualSeconds =
+            typeof usage?.seconds === "number" ? Math.max(0, usage.seconds) : null;
+          if (actualSeconds !== null) setUsageSeconds(actualSeconds);
+          finishInterviewLog(interviewLogRef.current, actualSeconds);
           finalizingRef.current = true;
           updateStatus("ended");
           cleanupResources();
@@ -231,6 +234,8 @@ export function InterviewApp() {
       interviewConfig: InterviewConfig,
       interviewPlan: InterviewPlan | null,
     ) => {
+      finishInterviewLog(interviewLogRef.current, null);
+      interviewLogRef.current = null;
       cleanupResources();
       finalizingRef.current = false;
       updateStatus("connecting");
@@ -270,6 +275,7 @@ export function InterviewApp() {
           if (peer.connectionState === "failed") {
             setError("The peer-to-peer audio connection failed. Please try again.");
             updateStatus("error");
+            finishInterviewLog(interviewLogRef.current, null);
             cleanupResources();
           }
         });
@@ -306,6 +312,7 @@ export function InterviewApp() {
           if (statusRef.current === "ending") return;
           setError("The Live event channel closed unexpectedly.");
           updateStatus("error");
+          finishInterviewLog(interviewLogRef.current, null);
           cleanupResources();
         });
 
@@ -341,6 +348,8 @@ export function InterviewApp() {
           !result ||
           !("session" in result) ||
           typeof result.session?.id !== "string" ||
+          !("interview" in result) ||
+          typeof result.interview?.id !== "string" ||
           !("transport" in result) ||
           typeof result.transport?.sdp !== "string"
         ) {
@@ -348,6 +357,10 @@ export function InterviewApp() {
         }
 
         setSessionId(result.session.id);
+        interviewLogRef.current = {
+          id: result.interview.id,
+          openaiSessionId: result.session.id,
+        };
         await peer.setRemoteDescription({
           type: "answer",
           sdp: result.transport.sdp,
@@ -357,6 +370,7 @@ export function InterviewApp() {
           startTimeoutRef.current = setTimeout(() => {
             setError("The Live session did not finish starting. Please try again.");
             updateStatus("error");
+            finishInterviewLog(interviewLogRef.current, null);
             cleanupResources();
           }, START_TIMEOUT_MS);
         }
@@ -375,6 +389,7 @@ export function InterviewApp() {
         }
         setError(message);
         updateStatus("error");
+        finishInterviewLog(interviewLogRef.current, null);
         cleanupResources();
       }
     },
@@ -458,6 +473,7 @@ export function InterviewApp() {
       closeTimeoutRef.current = setTimeout(() => {
         setError("The session ended without final usage confirmation.");
         updateStatus("ended");
+        finishInterviewLog(interviewLogRef.current, null);
         cleanupResources();
       }, CLOSE_TIMEOUT_MS);
       return;
@@ -465,6 +481,7 @@ export function InterviewApp() {
 
     finalizingRef.current = true;
     updateStatus("ended");
+    finishInterviewLog(interviewLogRef.current, null);
     cleanupResources();
   }, [cleanupResources, sendEvent, updateStatus]);
 
@@ -484,6 +501,15 @@ export function InterviewApp() {
       elapsedSeconds >= config.durationMinutes * 60
     ) endInterview();
   }, [config, elapsedSeconds, endInterview, status]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      sendInterviewCompletionBeacon(interviewLogRef.current);
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, []);
 
   const toggleMute = useCallback(() => {
     if (statusRef.current !== "connected" || mutePending) return;
@@ -576,6 +602,42 @@ function makeId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function finishInterviewLog(
+  reference: InterviewLogReference | null,
+  actualSeconds: number | null,
+) {
+  if (!reference) return;
+
+  void fetch("/api/interviews/complete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: reference.id,
+      openaiSessionId: reference.openaiSessionId,
+      actualSeconds,
+    }),
+    keepalive: true,
+  }).catch(() => undefined);
+}
+
+function sendInterviewCompletionBeacon(reference: InterviewLogReference | null) {
+  if (!reference || !navigator.sendBeacon) return;
+
+  navigator.sendBeacon(
+    "/api/interviews/complete",
+    new Blob(
+      [
+        JSON.stringify({
+          id: reference.id,
+          openaiSessionId: reference.openaiSessionId,
+          actualSeconds: null,
+        }),
+      ],
+      { type: "application/json" },
+    ),
+  );
 }
 
 function waitForIceGathering(peer: RTCPeerConnection, timeoutMs: number) {

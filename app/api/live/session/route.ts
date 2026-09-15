@@ -1,6 +1,9 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
+import { requireApiAccess } from "@/lib/api-access";
+import { createInterviewLog } from "@/lib/interview-log";
 import { buildInterviewPrompt } from "@/lib/interview-prompt";
 import { questionCountForDuration, validateInterviewPlan } from "@/lib/question-plan";
 import { LIVE_VOICES } from "@/lib/types";
@@ -129,7 +132,10 @@ function validateBody(value: unknown):
   };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const accessError = requireApiAccess(request);
+  if (accessError) return accessError;
+
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "OPENAI_API_KEY is not configured on the server." },
@@ -166,9 +172,16 @@ export async function POST(request: Request) {
         sdp: parsed.sdp,
       },
     });
+    const interviewLogId = createInterviewLog({
+      headers: request.headers,
+      openaiSessionId: result.session.id,
+      interview: parsed.interview,
+      plan: parsed.plan,
+    });
 
     return NextResponse.json(
       {
+        interview: { id: interviewLogId },
         session: { id: result.session.id },
         transport: { type: result.transport.type, sdp: result.transport.sdp },
       },

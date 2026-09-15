@@ -56,6 +56,116 @@ svg {
   stroke-width: 1.8;
 }
 
+/* Passcode access */
+
+.access-shell {
+  min-height: 100vh;
+  padding: 32px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.access-shell::before,
+.access-shell::after {
+  content: "";
+  border: 1px solid rgba(30, 89, 75, 0.1);
+  border-radius: 999px;
+  position: absolute;
+  pointer-events: none;
+}
+
+.access-shell::before {
+  width: 520px;
+  height: 520px;
+  left: -280px;
+  top: -160px;
+}
+
+.access-shell::after {
+  width: 390px;
+  height: 390px;
+  right: -210px;
+  bottom: -170px;
+}
+
+.access-card {
+  width: min(460px, 100%);
+  padding: 42px;
+  border: 1px solid rgba(23, 33, 30, 0.11);
+  border-radius: 24px;
+  position: relative;
+  z-index: 1;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.access-heading {
+  margin: 48px 0 30px;
+}
+
+.access-heading h1 {
+  margin: 10px 0 12px;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+  font-weight: 640;
+}
+
+.access-heading > p:last-child {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.access-card form {
+  display: grid;
+  gap: 12px;
+}
+
+.access-card form > label {
+  color: #3e4945;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.access-card input {
+  width: 100%;
+  height: 48px;
+  padding: 0 13px;
+  border: 1px solid #d8d8cf;
+  border-radius: 10px;
+  outline: none;
+  color: var(--ink);
+  background: #fbfaf5;
+  transition: border-color 150ms ease, box-shadow 150ms ease,
+    background 150ms ease;
+}
+
+.access-card input:focus {
+  border-color: var(--green);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(30, 89, 75, 0.1);
+}
+
+.access-card .primary-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.access-error {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid #efc7be;
+  border-radius: 9px;
+  color: #963f2d;
+  background: #fff2ee;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .setup-shell {
   min-height: 100vh;
   overflow: hidden;

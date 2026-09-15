@@ -13,13 +13,19 @@ The current OpenAI Live SDK requires Node.js 22.6 or newer.
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local`.
 3. Add your server-side `OPENAI_API_KEY` to `.env.local`.
-4. Start the app with `npm run dev`.
-5. Open [http://localhost:3000](http://localhost:3000) and use headphones for the
+4. Add a shared `APP_PASSCODE`; the app and its API routes fail closed when it is
+   missing. Use a strong passcode because this MVP does not rate-limit attempts.
+5. Start the app with `npm run dev`.
+6. Open [http://localhost:3000](http://localhost:3000) and use headphones for the
    first audio test.
 
 The API key is read only by `POST /api/interview-plan` and
 `POST /api/live/session`; it is never returned to the browser. Do not commit
 `.env.local`.
+
+The passcode is checked only on the server. Successful access creates a signed,
+HttpOnly cookie that expires after seven days. Changing `APP_PASSCODE`
+immediately invalidates existing access cookies.
 
 ## Current scope
 
@@ -34,4 +40,12 @@ The Live room includes a voice picker with Willow as the default, lightweight
 captions, mute/end controls, connection states, and a raw event panel. When the
 session ends, the UI shows separate Luna and Live estimates plus the total cost.
 
-Evaluation, persistence, and backend delegation are intentionally deferred.
+Evaluation and backend delegation are intentionally deferred.
+
+## Session logs
+
+Successful Live session creations are recorded in `.data/interviews.sqlite`.
+The browser completes the row with final usage when the Live session closes;
+interrupted sessions are retained with `ended_without_usage` status. Set
+`SQLITE_DATABASE_PATH` to use another persistent location. IP addresses are
+read from deployment proxy headers and stored directly in the session log.

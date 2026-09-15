@@ -92,6 +92,7 @@ export interface DebugEvent {
 }
 
 export interface LiveSessionResponse {
+  interview: { id: string };
   session: { id: string };
   transport: { type: "webrtc"; sdp: string };
 }

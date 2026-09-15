@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
+import { requireApiAccess } from "@/lib/api-access";
 import {
   estimateLunaCost,
   followUpTargetForQuestionCount,
@@ -135,7 +137,10 @@ function parseGeneratedPlan(outputText: string, questionCount: number) {
   return { summary: raw.summary.trim().slice(0, 600), questions };
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const accessError = requireApiAccess(request);
+  if (accessError) return accessError;
+
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
       { error: "OPENAI_API_KEY is not configured on the server." },

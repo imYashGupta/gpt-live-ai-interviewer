@@ -89,7 +89,7 @@ export function InterviewSetup({
             </div>
             <div>
               <span className="step-number">03</span>
-              <p><strong>Inspect the session</strong><small>Follow captions and Live events</small></p>
+              <p><strong>Review your report</strong><small>Scores, answer insights, and a practice plan</small></p>
             </div>
           </div>
 
@@ -97,7 +97,7 @@ export function InterviewSetup({
             <LockIcon />
             <p>
               Your OpenAI key remains on the server. Browser audio connects over
-              WebRTC.
+              WebRTC. Your text transcript and assessment are saved after the interview.
             </p>
           </div>
         </div>

@@ -3,7 +3,9 @@
 import type { RefObject } from "react";
 
 import { DebugPanel } from "@/components/debug-panel";
+import { InterviewReportLoader } from "@/components/interview-report-loader";
 import { TranscriptPanel } from "@/components/transcript-panel";
+import type { InterviewReport } from "@/lib/interview-report";
 import type {
   ConnectionStatus,
   DebugEvent,
@@ -18,6 +20,9 @@ interface InterviewRoomProps {
   plan: InterviewPlan | null;
   status: ConnectionStatus;
   sessionId: string | null;
+  interviewId: string | null;
+  report: InterviewReport | null;
+  onReportReady: (report: InterviewReport) => void;
   error: string | null;
   elapsedSeconds: number;
   usageSeconds: number | null;
@@ -50,6 +55,9 @@ export function InterviewRoom({
   plan,
   status,
   sessionId,
+  interviewId,
+  report,
+  onReportReady,
   error,
   elapsedSeconds,
   usageSeconds,
@@ -73,7 +81,7 @@ export function InterviewRoom({
   const canControl = status === "connected";
 
   return (
-    <main className="room-shell">
+    <main className={`room-shell ${status === "ended" ? "room-completed" : ""}`}>
       <audio ref={audioRef} autoPlay playsInline className="remote-audio" />
 
       <header className="room-header">
@@ -105,7 +113,12 @@ export function InterviewRoom({
         </div>
       </header>
 
-      <div className="room-layout">
+      {status === "ended" ? <>
+        <div className="report-container">
+          <InterviewReportLoader key={interviewId} id={interviewId} openaiSessionId={sessionId} transcript={transcript} usageSeconds={usageSeconds} report={report} onReady={onReportReady} />
+        </div>
+        <details className="completed-transcript"><summary>View full interview transcript <span>{transcript.length} entries</span></summary><TranscriptPanel entries={transcript} isLive={false} /></details>
+      </> : <div className="room-layout">
         <section className="conversation-stage">
           <div className="stage-topbar">
             <div>
@@ -170,9 +183,7 @@ export function InterviewRoom({
                       ? "Interviewer is speaking"
                       : status === "connected"
                         ? "Interviewer is listening"
-                        : status === "ended"
-                          ? "Interview complete"
-                          : "Waiting to connect"}
+                        : "Waiting to connect"}
               </div>
             </article>
 
@@ -208,21 +219,20 @@ export function InterviewRoom({
                 ? "Speak naturally — pauses and interruptions are welcome."
                 : status === "connecting"
                   ? "Keep this tab open while the secure audio link starts."
-                  : status === "ended"
-                    ? "Your transcript remains available in this browser."
-                    : "Use headphones for the clearest conversation."}
+                  : "Use headphones for the clearest conversation."}
             </p>
           </div>
         </section>
 
         <TranscriptPanel entries={transcript} isLive={status === "connected"} />
-      </div>
+      </div>}
 
       {status === "ended" && (
         <SessionCostSummary
           elapsedSeconds={elapsedSeconds}
           usageSeconds={usageSeconds}
           plan={plan}
+          report={report}
         />
       )}
 
@@ -241,15 +251,18 @@ function SessionCostSummary({
   elapsedSeconds,
   usageSeconds,
   plan,
+  report,
 }: {
   elapsedSeconds: number;
   usageSeconds: number | null;
   plan: InterviewPlan | null;
+  report: InterviewReport | null;
 }) {
   const billedSeconds = usageSeconds ?? elapsedSeconds;
   const sessionCost = (billedSeconds / 60) * GPT_LIVE_PRICE_USD_PER_MINUTE;
   const planCost = plan?.generation.estimatedCostUsd ?? 0;
-  const totalCost = sessionCost + planCost;
+  const reportCost = report?.generation?.estimatedCostUsd ?? 0;
+  const totalCost = sessionCost + planCost + reportCost;
   const measured = usageSeconds !== null;
 
   return (
@@ -290,8 +303,9 @@ function SessionCostSummary({
           )}
         </div>
         <div>
-          <span>Other backend models &amp; tools</span>
-          <strong>None used</strong>
+          <span>Luna interview report</span>
+          <strong>{report ? formatCurrency(reportCost) : "Pending report"}</strong>
+          <small>{report?.generation ? `${report.generation.inputTokens.toLocaleString()} input + ${report.generation.outputTokens.toLocaleString()} output tokens` : report ? "No model used: no candidate answers" : "Total will include report generation when ready"}</small>
         </div>
       </div>
 
@@ -299,7 +313,7 @@ function SessionCostSummary({
         {measured
           ? "Live cost uses the final server usage event."
           : "Final Live usage was unavailable, so Live cost uses elapsed browser time."}
-        {plan && " Luna cost uses the recorded response tokens."} Your OpenAI
+        {(plan || report?.generation) && " Luna costs use the recorded response tokens."} Your OpenAI
         dashboard remains the billing source of truth.
       </p>
     </section>

@@ -6,6 +6,7 @@ import { InterviewRoom } from "@/components/interview-room";
 import { InterviewPlanReview } from "@/components/interview-plan-review";
 import { InterviewSetup } from "@/components/interview-setup";
 import { validateInterviewPlan } from "@/lib/question-plan";
+import type { InterviewReport } from "@/lib/interview-report";
 import type {
   ConnectionStatus,
   DebugEvent,
@@ -33,6 +34,8 @@ export function InterviewApp() {
   const [planError, setPlanError] = useState<string | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [report, setReport] = useState<InterviewReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [events, setEvents] = useState<DebugEvent[]>([]);
@@ -241,6 +244,8 @@ export function InterviewApp() {
       updateStatus("connecting");
       setError(null);
       setSessionId(null);
+      setInterviewId(null);
+      setReport(null);
       setTranscript([]);
       setEvents([]);
       setMuted(false);
@@ -357,6 +362,7 @@ export function InterviewApp() {
         }
 
         setSessionId(result.session.id);
+        setInterviewId(result.interview.id);
         interviewLogRef.current = {
           id: result.interview.id,
           openaiSessionId: result.session.id,
@@ -573,6 +579,9 @@ export function InterviewApp() {
       plan={plan}
       status={status}
       sessionId={sessionId}
+      interviewId={interviewId}
+      report={report}
+      onReportReady={setReport}
       error={error}
       elapsedSeconds={elapsedSeconds}
       usageSeconds={usageSeconds}

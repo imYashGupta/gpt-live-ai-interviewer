@@ -47,7 +47,7 @@ All `/v1` requests use `Authorization: Bearer <service credential>`. All mutatio
 | `POST /v1/webhook-endpoints` | Available; pending operator verification |
 | Plan creation/read/approval, interview listing/update/deletion, artifacts | Contract declared; implementation pending |
 
-Schemas and example requests live under `contracts/interview-service/v1`. The schema is provider-neutral; unsupported configuration is rejected. Interview creation does not send an email. Recooty's future integration will own invitations.
+Schemas and example requests live under `contracts/interview-service/v1`. The schema is provider-neutral; unsupported configuration is rejected. Interview creation does not send an email. Recooty's integration owns invitations; delivery remains disabled by default.
 
 Open the returned `/join#...` link and click **Continue** to exchange it for a single-interview session. GET requests never redeem a token. The fragment is removed from browser history and is never submitted as a URL query. Click **Run synthetic test** to create one durable attempt. Refresh status after the worker runs. Closing the tab does not stop the queued test. A lost browser session after redemption requires a new link while the interview is unstarted; automatic cross-device session recovery is not implemented.
 
@@ -94,4 +94,4 @@ Covered: strict schemas, tenant and scope boundaries, key revocation, concurrent
 
 Connect the actual GPT-Live adapter and hosted room behind these interfaces, capture trusted incremental evidence and final usage, renew worker leases during long sessions, and generate real evidence-based assessments. Finish reviewed plans, reconciliation listing, rescheduling, private artifacts, deletion/retention, webhook ownership/secret rotation, and production rate limits. Validate provider costs and billing semantics before paid usage. The provider name/session ID must remain private to the service.
 
-Recooty's UI, scheduling models, inbound inbox, and Soulbscription consumption remain later phases. The fake flow verifies the service boundary and persistence; it does not complete the full Phase 2 exit gate or establish production readiness.
+Recooty now has the Phase 3 sandbox panel, workspace/interview mappings, durable commands, verified inbox, report view and zero-charge usage mirror. Enablement and queue/webhook setup are documented in section 12 of `AI_INTERVIEW_INTEGRATION_PLAN.md` in both repositories. Existing AI scheduling workflows and Soulbscription consumption remain later phases. The fake flow verifies the service boundary and persistence; it does not complete the full Phase 2 or real-candidate Phase 3 exit gate or establish production readiness.

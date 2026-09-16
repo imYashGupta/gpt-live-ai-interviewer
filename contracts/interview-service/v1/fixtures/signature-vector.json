@@ -1,0 +1,7 @@
+{
+  "body": "{\n  \"id\": \"evt_example\",\n  \"type\": \"usage.settled\",\n  \"schema_version\": \"1.0\",\n  \"occurred_at\": \"2026-10-01T09:15:00Z\",\n  \"account_id\": \"acct_recooty\",\n  \"workspace_id\": \"ws_example\",\n  \"subject\": \"interview/int_example\",\n  \"resource_version\": 8,\n  \"data\": {\n    \"settlement_id\": \"set_example\",\n    \"interview_id\": \"int_example\",\n    \"attempt_id\": \"att_example\",\n    \"workspace_id\": \"ws_example\",\n    \"external_reference\": \"ats-interview-842\",\n    \"external_reservation_id\": \"hold_example\",\n    \"metric\": \"interview_seconds\",\n    \"measured_quantity\": 742,\n    \"billable_quantity\": 742,\n    \"credit_quantity\": \"12.366667\",\n    \"rate_card_version\": \"service-standard-v1\",\n    \"settled_at\": \"2026-10-01T09:15:00Z\",\n    \"record_type\": \"settlement\"\n  }\n}\n",
+  "event_id": "evt_example",
+  "timestamp": "1790846100",
+  "secret": "test-only-webhook-secret-0123456789",
+  "signature": "v1=7d55f10910a9dec8f54ced210be57987d3915057a4cd97cfaecab6c3b3975f46"
+}

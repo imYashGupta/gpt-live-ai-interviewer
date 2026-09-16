@@ -1,0 +1,17 @@
+{
+  "id": "evt_result_example",
+  "type": "result.ready",
+  "schema_version": "1.0",
+  "occurred_at": "2026-10-01T09:15:00Z",
+  "account_id": "acct_recooty",
+  "workspace_id": "ws_example",
+  "subject": "interview/int_example",
+  "resource_version": 9,
+  "data": {
+    "interview_id": "int_example",
+    "attempt_id": "att_example",
+    "external_reference": "ats-interview-842",
+    "result_revision": 1,
+    "assessment_status": "ready"
+  }
+}

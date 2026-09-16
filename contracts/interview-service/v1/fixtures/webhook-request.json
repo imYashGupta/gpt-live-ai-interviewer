@@ -1,0 +1,7 @@
+{
+  "url": "https://ats.example/hooks/interviews",
+  "event_types": [
+    "result.ready",
+    "usage.settled"
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "workspace_id": "ws_example",
+  "job": {
+    "external_id": "job-example",
+    "title": "Backend Engineer",
+    "description": "Build reliable services."
+  },
+  "language": "en",
+  "duration_limit_seconds": 900,
+  "difficulty": "mid",
+  "rubric_version_id": "rubric_backend_v1",
+  "follow_ups_enabled": true
+}

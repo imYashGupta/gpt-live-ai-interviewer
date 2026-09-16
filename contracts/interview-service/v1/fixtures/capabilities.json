@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "modes": [
+    "adaptive"
+  ],
+  "modalities": [
+    "audio"
+  ],
+  "languages": [
+    "en"
+  ],
+  "duration_min_seconds": 60,
+  "duration_max_seconds": 3600,
+  "interviewer_profile_ids": [
+    "profile_default"
+  ],
+  "rubric_version_ids": [
+    "rubric_backend_v1"
+  ]
+}

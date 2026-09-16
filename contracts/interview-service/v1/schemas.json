@@ -1,0 +1,1703 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://interview-service.example/contracts/v1/schemas.json",
+  "$defs": {
+    "Availability": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "window",
+            "appointment"
+          ]
+        },
+        "opens_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "last_start_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "must_finish_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "display_timezone": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "kind",
+        "opens_at",
+        "last_start_at",
+        "must_finish_at",
+        "display_timezone"
+      ],
+      "additionalProperties": false
+    },
+    "Configuration": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "adaptive",
+            "structured"
+          ]
+        },
+        "modality": {
+          "type": "string",
+          "enum": [
+            "audio"
+          ]
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35
+        },
+        "duration_limit_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 3600
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": [
+            "junior",
+            "mid",
+            "senior"
+          ]
+        },
+        "follow_ups_enabled": {
+          "type": "boolean"
+        },
+        "interviewer_profile_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "rubric_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "plan_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        }
+      },
+      "required": [
+        "mode",
+        "modality",
+        "language",
+        "duration_limit_seconds",
+        "difficulty",
+        "follow_ups_enabled",
+        "interviewer_profile_id",
+        "rubric_version_id"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "structured"
+              }
+            },
+            "required": [
+              "mode"
+            ]
+          },
+          "then": {
+            "required": [
+              "plan_version_id"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "plan_version_id"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "AuthorizationBudget": {
+      "type": "object",
+      "properties": {
+        "external_reservation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "metric": {
+          "const": "interview_seconds"
+        },
+        "max_quantity": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "start_before": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "external_reservation_id",
+        "metric",
+        "max_quantity",
+        "start_before"
+      ],
+      "additionalProperties": false
+    },
+    "CreateInterviewRequest": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "candidate": {
+          "type": "object",
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "display_name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "external_id",
+            "display_name"
+          ],
+          "additionalProperties": false
+        },
+        "job": {
+          "type": "object",
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 6000
+            }
+          },
+          "required": [
+            "external_id",
+            "title",
+            "description"
+          ],
+          "additionalProperties": false
+        },
+        "configuration": {
+          "$ref": "#/$defs/Configuration"
+        },
+        "availability": {
+          "$ref": "#/$defs/Availability"
+        },
+        "authorization_budget": {
+          "$ref": "#/$defs/AuthorizationBudget"
+        },
+        "metadata": {
+          "type": "object",
+          "maxProperties": 20,
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "required": [
+        "workspace_id",
+        "external_reference",
+        "candidate",
+        "job",
+        "configuration",
+        "availability",
+        "authorization_budget"
+      ],
+      "additionalProperties": false
+    },
+    "Interview": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "execution_status": {
+          "type": "string",
+          "enum": [
+            "created",
+            "ready",
+            "in_progress",
+            "completed",
+            "interrupted",
+            "failed",
+            "cancelled",
+            "expired"
+          ]
+        },
+        "assessment_status": {
+          "type": "string",
+          "enum": [
+            "not_requested",
+            "pending",
+            "processing",
+            "ready",
+            "insufficient_evidence",
+            "failed"
+          ]
+        },
+        "usage_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "provisional",
+            "settled"
+          ]
+        },
+        "attempt_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "id",
+        "workspace_id",
+        "external_reference",
+        "resource_version",
+        "execution_status",
+        "assessment_status",
+        "usage_status",
+        "attempt_id",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    "TranscriptTurn": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "speaker": {
+          "type": "string",
+          "enum": [
+            "interviewer",
+            "candidate"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30000
+        },
+        "start_ms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "speaker",
+        "text",
+        "start_ms",
+        "end_ms"
+      ],
+      "additionalProperties": false
+    },
+    "Competency": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "score": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "score",
+        "rationale",
+        "evidence_ids"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "score": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "score"
+            ]
+          },
+          "then": {
+            "properties": {
+              "evidence_ids": {
+                "minItems": 1,
+                "type": "array"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ready",
+            "insufficient_evidence"
+          ]
+        },
+        "rubric_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 6000
+        },
+        "score_scale": {
+          "type": "object",
+          "properties": {
+            "min": {
+              "const": 0
+            },
+            "max": {
+              "const": 100
+            }
+          },
+          "required": [
+            "min",
+            "max"
+          ],
+          "additionalProperties": false
+        },
+        "overall_score": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "competencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Competency"
+          },
+          "maxItems": 100
+        },
+        "transcript": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TranscriptTurn"
+          },
+          "maxItems": 10000
+        },
+        "coverage_limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "maxItems": 100
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        }
+      },
+      "required": [
+        "schema_version",
+        "interview_id",
+        "attempt_id",
+        "revision",
+        "status",
+        "rubric_version_id",
+        "summary",
+        "score_scale",
+        "overall_score",
+        "competencies",
+        "transcript",
+        "coverage_limits",
+        "workspace_id"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "insufficient_evidence"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "overall_score": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Settlement": {
+      "type": "object",
+      "properties": {
+        "settlement_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "external_reservation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "metric": {
+          "const": "interview_seconds"
+        },
+        "measured_quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "billable_quantity": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "credit_quantity": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{6}$"
+        },
+        "rate_card_version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "settled_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "record_type": {
+          "const": "settlement"
+        }
+      },
+      "required": [
+        "settlement_id",
+        "interview_id",
+        "attempt_id",
+        "workspace_id",
+        "external_reference",
+        "external_reservation_id",
+        "metric",
+        "measured_quantity",
+        "billable_quantity",
+        "credit_quantity",
+        "rate_card_version",
+        "settled_at",
+        "record_type"
+      ],
+      "additionalProperties": false
+    },
+    "UsagePage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Settlement"
+              },
+              {
+                "$ref": "#/$defs/UsageAdjustment"
+              }
+            ]
+          },
+          "maxItems": 100
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "data",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "Balance": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "available_credits": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{6}$"
+        },
+        "reserved_credits": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{6}$"
+        },
+        "unlimited": {
+          "type": "boolean"
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "available_credits",
+        "reserved_credits",
+        "unlimited",
+        "as_of"
+      ],
+      "additionalProperties": false
+    },
+    "Capabilities": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "adaptive",
+              "structured"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "modalities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "audio"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 35
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "duration_min_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_max_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "interviewer_profile_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "rubric_version_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "schema_version",
+        "modes",
+        "modalities",
+        "languages",
+        "duration_min_seconds",
+        "duration_max_seconds",
+        "interviewer_profile_ids",
+        "rubric_version_ids"
+      ],
+      "additionalProperties": false
+    },
+    "AccessLinkRequest": {
+      "type": "object",
+      "properties": {
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "AccessLink": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "id",
+        "interview_id",
+        "url",
+        "expires_at"
+      ],
+      "additionalProperties": false
+    },
+    "CancelRequest": {
+      "type": "object",
+      "properties": {
+        "expected_resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "employer_request",
+            "candidate_request",
+            "rescheduled"
+          ]
+        }
+      },
+      "required": [
+        "expected_resource_version",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "Error": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "request_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "retryable": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "request_id",
+            "retryable"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "UsageSettledEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "type": {
+          "const": "usage.settled"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^interview/[A-Za-z0-9_-]+$"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "$ref": "#/$defs/Settlement"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "schema_version",
+        "occurred_at",
+        "account_id",
+        "workspace_id",
+        "subject",
+        "resource_version",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "ResultReadyEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "type": {
+          "const": "result.ready"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^interview/[A-Za-z0-9_-]+$"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "interview_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "attempt_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "external_reference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "result_revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "assessment_status": {
+              "type": "string",
+              "enum": [
+                "ready",
+                "insufficient_evidence"
+              ]
+            }
+          },
+          "required": [
+            "interview_id",
+            "attempt_id",
+            "external_reference",
+            "result_revision",
+            "assessment_status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "schema_version",
+        "occurred_at",
+        "account_id",
+        "workspace_id",
+        "subject",
+        "resource_version",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "LifecycleEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "interview.started",
+            "interview.completed",
+            "interview.interrupted",
+            "interview.failed",
+            "interview.cancelled",
+            "interview.expired",
+            "interview.deleted",
+            "result.failed"
+          ]
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^interview/[A-Za-z0-9_-]+$"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "interview_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            "attempt_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "external_reference": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          },
+          "required": [
+            "interview_id",
+            "attempt_id",
+            "external_reference"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "schema_version",
+        "occurred_at",
+        "account_id",
+        "workspace_id",
+        "subject",
+        "resource_version",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/UsageSettledEvent"
+        },
+        {
+          "$ref": "#/$defs/ResultReadyEvent"
+        },
+        {
+          "$ref": "#/$defs/LifecycleEvent"
+        },
+        {
+          "$ref": "#/$defs/UsageAdjustedEvent"
+        }
+      ]
+    },
+    "WorkspaceRequest": {
+      "type": "object",
+      "properties": {
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        }
+      },
+      "required": [
+        "external_reference",
+        "display_name"
+      ],
+      "additionalProperties": false
+    },
+    "Workspace": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "id",
+        "external_reference",
+        "display_name",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    "PlanQuestion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "competency_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "follow_ups": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "competency_id",
+        "follow_ups"
+      ],
+      "additionalProperties": false
+    },
+    "CreatePlanRequest": {
+      "type": "object",
+      "properties": {
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "job": {
+          "type": "object",
+          "properties": {
+            "external_id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 180
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 6000
+            }
+          },
+          "required": [
+            "external_id",
+            "title",
+            "description"
+          ],
+          "additionalProperties": false
+        },
+        "language": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 35
+        },
+        "duration_limit_seconds": {
+          "type": "integer",
+          "minimum": 60,
+          "maximum": 3600
+        },
+        "difficulty": {
+          "type": "string",
+          "enum": [
+            "junior",
+            "mid",
+            "senior"
+          ]
+        },
+        "rubric_version_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "follow_ups_enabled": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "workspace_id",
+        "job",
+        "language",
+        "duration_limit_seconds",
+        "difficulty",
+        "rubric_version_id",
+        "follow_ups_enabled"
+      ],
+      "additionalProperties": false
+    },
+    "Plan": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "generating",
+            "draft",
+            "approved",
+            "failed"
+          ]
+        },
+        "plan_version_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanQuestion"
+          },
+          "maxItems": 100
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        }
+      },
+      "required": [
+        "id",
+        "workspace_id",
+        "resource_version",
+        "status",
+        "plan_version_id",
+        "questions",
+        "updated_at"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "approved"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "plan_version_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "questions": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "UpdatePlanRequest": {
+      "type": "object",
+      "properties": {
+        "expected_resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PlanQuestion"
+          },
+          "maxItems": 100,
+          "minItems": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "approved"
+          ]
+        }
+      },
+      "required": [
+        "expected_resource_version",
+        "questions",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "UpdateInterviewRequest": {
+      "type": "object",
+      "properties": {
+        "expected_resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "availability": {
+          "$ref": "#/$defs/Availability"
+        },
+        "authorization_budget": {
+          "$ref": "#/$defs/AuthorizationBudget"
+        }
+      },
+      "required": [
+        "expected_resource_version",
+        "availability",
+        "authorization_budget"
+      ],
+      "additionalProperties": false
+    },
+    "InterviewPage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Interview"
+          },
+          "maxItems": 100
+        },
+        "next_cursor": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "data",
+        "next_cursor"
+      ],
+      "additionalProperties": false
+    },
+    "Artifact": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "transcript",
+            "audio_recording",
+            "video_recording",
+            "report_pdf"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "content_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "url",
+        "expires_at",
+        "content_type"
+      ],
+      "additionalProperties": false
+    },
+    "ArtifactPage": {
+      "type": "object",
+      "properties": {
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Artifact"
+          },
+          "maxItems": 100
+        }
+      },
+      "required": [
+        "interview_id",
+        "workspace_id",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "Deletion": {
+      "type": "object",
+      "properties": {
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "status": {
+          "const": "deletion_pending"
+        }
+      },
+      "required": [
+        "interview_id",
+        "workspace_id",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "WebhookEndpointRequest": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "event_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "interview.started",
+              "interview.completed",
+              "interview.interrupted",
+              "interview.failed",
+              "interview.cancelled",
+              "interview.expired",
+              "interview.deleted",
+              "result.ready",
+              "result.failed",
+              "usage.settled",
+              "usage.adjusted"
+            ]
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "url",
+        "event_types"
+      ],
+      "additionalProperties": false
+    },
+    "WebhookEndpoint": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "status": {
+          "const": "pending_verification"
+        },
+        "signing_secret": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "id",
+        "url",
+        "status",
+        "signing_secret"
+      ],
+      "additionalProperties": false
+    },
+    "UsageAdjustment": {
+      "type": "object",
+      "properties": {
+        "adjustment_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "original_settlement_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reservation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "external_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "metric": {
+          "const": "interview_seconds"
+        },
+        "billable_quantity_delta": {
+          "type": "integer"
+        },
+        "credit_quantity_delta": {
+          "type": "string",
+          "pattern": "^-?(0|[1-9][0-9]*)\\.[0-9]{6}$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "service_failure_refund",
+            "measurement_correction",
+            "billing_correction"
+          ]
+        },
+        "adjusted_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "record_type": {
+          "const": "adjustment"
+        }
+      },
+      "required": [
+        "adjustment_id",
+        "original_settlement_id",
+        "interview_id",
+        "attempt_id",
+        "workspace_id",
+        "external_reservation_id",
+        "external_reference",
+        "metric",
+        "billable_quantity_delta",
+        "credit_quantity_delta",
+        "reason",
+        "adjusted_at",
+        "record_type"
+      ],
+      "additionalProperties": false
+    },
+    "UsageAdjustedEvent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "type": {
+          "const": "usage.adjusted"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "account_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "subject": {
+          "type": "string",
+          "pattern": "^interview/[A-Za-z0-9_-]+$"
+        },
+        "resource_version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "data": {
+          "$ref": "#/$defs/UsageAdjustment"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "schema_version",
+        "occurred_at",
+        "account_id",
+        "workspace_id",
+        "subject",
+        "resource_version",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

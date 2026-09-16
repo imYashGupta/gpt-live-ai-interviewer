@@ -1,0 +1,6 @@
+{
+  "id": "hook_example",
+  "url": "https://ats.example/hooks/interviews",
+  "status": "pending_verification",
+  "signing_secret": "example-only-secret-never-use-in-production"
+}

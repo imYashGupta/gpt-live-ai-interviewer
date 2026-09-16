@@ -1,0 +1,36 @@
+{
+  "workspace_id": "ws_example",
+  "external_reference": "ats-interview-842",
+  "candidate": {
+    "external_id": "candidate-123",
+    "display_name": "Example Candidate"
+  },
+  "job": {
+    "external_id": "job-456",
+    "title": "Backend Engineer",
+    "description": "Build reliable services."
+  },
+  "configuration": {
+    "mode": "adaptive",
+    "modality": "audio",
+    "language": "en",
+    "duration_limit_seconds": 900,
+    "difficulty": "mid",
+    "follow_ups_enabled": true,
+    "interviewer_profile_id": "profile_default",
+    "rubric_version_id": "rubric_backend_v1"
+  },
+  "availability": {
+    "kind": "window",
+    "opens_at": "2026-10-01T09:00:00Z",
+    "last_start_at": "2026-10-07T17:45:00Z",
+    "must_finish_at": "2026-10-07T18:00:00Z",
+    "display_timezone": "Asia/Kolkata"
+  },
+  "authorization_budget": {
+    "external_reservation_id": "hold_example",
+    "metric": "interview_seconds",
+    "max_quantity": 900,
+    "start_before": "2026-10-07T17:45:00Z"
+  }
+}

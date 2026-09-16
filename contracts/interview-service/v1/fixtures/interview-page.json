@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": "int_example",
+      "workspace_id": "ws_example",
+      "external_reference": "ats-interview-842",
+      "resource_version": 1,
+      "execution_status": "ready",
+      "assessment_status": "not_requested",
+      "usage_status": "pending",
+      "attempt_id": null,
+      "updated_at": "2026-10-01T08:00:00Z"
+    }
+  ],
+  "next_cursor": null
+}

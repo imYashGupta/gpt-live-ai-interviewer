@@ -1,0 +1,9 @@
+{
+  "id": "plan_example",
+  "workspace_id": "ws_example",
+  "resource_version": 1,
+  "status": "generating",
+  "plan_version_id": null,
+  "questions": [],
+  "updated_at": "2026-10-01T08:00:00Z"
+}

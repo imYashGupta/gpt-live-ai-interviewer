@@ -1,0 +1,6 @@
+{
+  "id": "link_example",
+  "interview_id": "int_example",
+  "url": "https://interviews.example/join/example-token",
+  "expires_at": "2026-10-07T17:45:00Z"
+}

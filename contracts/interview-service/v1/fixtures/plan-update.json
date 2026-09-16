@@ -1,0 +1,12 @@
+{
+  "expected_resource_version": 2,
+  "status": "approved",
+  "questions": [
+    {
+      "id": "question_1",
+      "text": "Explain an indexing trade-off.",
+      "competency_id": "databases",
+      "follow_ups": []
+    }
+  ]
+}

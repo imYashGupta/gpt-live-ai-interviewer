@@ -1,0 +1,25 @@
+{
+  "id": "evt_adjustment",
+  "type": "usage.adjusted",
+  "schema_version": "1.0",
+  "occurred_at": "2026-10-01T09:15:00Z",
+  "account_id": "acct_recooty",
+  "workspace_id": "ws_example",
+  "subject": "interview/int_example",
+  "resource_version": 10,
+  "data": {
+    "record_type": "adjustment",
+    "adjustment_id": "adj_example",
+    "original_settlement_id": "set_example",
+    "interview_id": "int_example",
+    "attempt_id": "att_example",
+    "workspace_id": "ws_example",
+    "external_reservation_id": "hold_example",
+    "external_reference": "ats-interview-842",
+    "metric": "interview_seconds",
+    "billable_quantity_delta": -60,
+    "credit_quantity_delta": "-1.000000",
+    "reason": "service_failure_refund",
+    "adjusted_at": "2026-10-01T09:20:00Z"
+  }
+}

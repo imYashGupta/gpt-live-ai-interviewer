@@ -1,0 +1,16 @@
+{
+  "expected_resource_version": 1,
+  "availability": {
+    "kind": "window",
+    "opens_at": "2026-10-01T09:00:00Z",
+    "last_start_at": "2026-10-07T17:45:00Z",
+    "must_finish_at": "2026-10-07T18:00:00Z",
+    "display_timezone": "Asia/Kolkata"
+  },
+  "authorization_budget": {
+    "external_reservation_id": "hold_example",
+    "metric": "interview_seconds",
+    "max_quantity": 900,
+    "start_before": "2026-10-07T17:45:00Z"
+  }
+}

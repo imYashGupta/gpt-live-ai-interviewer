@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "result_pending",
+    "message": "Assessment is processing.",
+    "request_id": "req_example",
+    "retryable": true
+  }
+}

@@ -13,6 +13,11 @@ const VERIFY_ACCESS_PATH = "/api/access/verify";
 export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // These routes enforce service credentials or candidate sessions themselves.
+  if (pathname === "/join" || pathname.startsWith("/v1/") || pathname.startsWith("/candidate/")) {
+    return NextResponse.next();
+  }
+
   if (
     pathname === ACCESS_PAGE_PATH ||
     pathname.startsWith(`${ACCESS_PAGE_PATH}/`) ||

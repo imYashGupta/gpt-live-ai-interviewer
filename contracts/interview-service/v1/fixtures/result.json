@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "interview_id": "int_example",
+  "attempt_id": "att_example",
+  "revision": 1,
+  "status": "ready",
+  "rubric_version_id": "rubric_backend_v1",
+  "summary": "Explained an indexing trade-off.",
+  "score_scale": {
+    "min": 0,
+    "max": 100
+  },
+  "overall_score": 80,
+  "competencies": [
+    {
+      "id": "databases",
+      "score": 80,
+      "rationale": "Identified a read/write trade-off.",
+      "evidence_ids": [
+        "turn_2"
+      ]
+    }
+  ],
+  "transcript": [
+    {
+      "id": "turn_1",
+      "speaker": "interviewer",
+      "text": "What is an indexing trade-off?",
+      "start_ms": 0,
+      "end_ms": 2000
+    },
+    {
+      "id": "turn_2",
+      "speaker": "candidate",
+      "text": "Faster reads but slower writes.",
+      "start_ms": 3000,
+      "end_ms": 10000
+    }
+  ],
+  "coverage_limits": [
+    "Only one competency assessed."
+  ],
+  "workspace_id": "ws_example"
+}

@@ -1,0 +1,25 @@
+{
+  "id": "evt_example",
+  "type": "usage.settled",
+  "schema_version": "1.0",
+  "occurred_at": "2026-10-01T09:15:00Z",
+  "account_id": "acct_recooty",
+  "workspace_id": "ws_example",
+  "subject": "interview/int_example",
+  "resource_version": 8,
+  "data": {
+    "settlement_id": "set_example",
+    "interview_id": "int_example",
+    "attempt_id": "att_example",
+    "workspace_id": "ws_example",
+    "external_reference": "ats-interview-842",
+    "external_reservation_id": "hold_example",
+    "metric": "interview_seconds",
+    "measured_quantity": 742,
+    "billable_quantity": 742,
+    "credit_quantity": "12.366667",
+    "rate_card_version": "service-standard-v1",
+    "settled_at": "2026-10-01T09:15:00Z",
+    "record_type": "settlement"
+  }
+}

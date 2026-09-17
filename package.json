@@ -12,17 +12,18 @@
     "service:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs migrate",
     "service:provision": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs provision",
     "service:worker": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs worker",
-    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs"
+    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs"
   },
   "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "better-sqlite3": "^13.0.3",
     "next": "^16.3.5",
     "openai": "^7.15.0",
     "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -30,6 +31,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.5",
     "typescript": "^6.0.3"

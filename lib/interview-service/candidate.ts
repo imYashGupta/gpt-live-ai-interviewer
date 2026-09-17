@@ -1,5 +1,5 @@
 import type { PoolClient } from "pg";
-import { hashToken, newId, newToken, ServiceError } from "./security.ts";
+import { hashToken, newId, newToken, seal, unseal, ServiceError } from "./security.ts";
 import { transaction } from "./postgres.ts";
 import { emitEvent, type InterviewRow, type InterviewService } from "./service.ts";
 
@@ -21,7 +21,7 @@ export async function exchangeInvitation(service: InterviewService, token: unkno
     return { token: session, expiresAt: row.request.availability.must_finish_at };
   });
 }
-async function candidateRow(db: PoolClient, token: string | null, lock: boolean) {
+export async function candidateRow(db: PoolClient, token: string | null, lock: boolean) {
   if (!token || !/^candidate_[A-Za-z0-9_-]{43}$/.test(token)) throw new ServiceError(401,"invalid_session");
   const found = await db.query<InterviewRow>(`SELECT i.* FROM service_interviews i
     JOIN service_candidate_sessions s ON s.interview_id=i.id
@@ -39,17 +39,25 @@ function candidateView(row: InterviewRow) {
   return { interview_id: row.id, execution_status: row.execution_status, attempt_id: row.attempt_id,
     job_title: row.request.job.title, duration_limit_seconds: row.request.configuration.duration_limit_seconds,
     opens_at: row.request.availability.opens_at, last_start_at: row.request.availability.last_start_at,
-    environment: "test", transport: "sandbox" };
+    environment: "test", transport: row.execution_provider === "fake" ? "sandbox" : "webrtc" };
 }
 export async function candidateStatus(service: InterviewService, token: string | null) {
   return transaction(service.pool, async db => candidateView(await candidateRow(db,token,false)));
 }
-export async function startCandidate(service: InterviewService, token: string | null) {
+export async function startCandidate(service: InterviewService, token: string | null, input: { sdp?: string; consent_version?: string } = {}) {
   return transaction(service.pool,async db => {
     const row = await candidateRow(db,token,true);
+    const live = row.execution_provider !== "fake";
+    if (live && (!input.sdp || input.sdp.length > 64000 || !input.sdp.startsWith("v=0") || input.consent_version !== "transcript_v1")) throw new ServiceError(422,"consent_and_offer_required");
+    if (!live && Object.keys(input).length) throw new ServiceError(422,"validation_failed");
+    if (live && row.attempt_id) {
+      const previous = (await db.query("SELECT offer_hash FROM service_attempts WHERE id=$1", [row.attempt_id])).rows[0];
+      if (previous.offer_hash !== hashToken(input.sdp!)) throw new ServiceError(409,"connection_already_started", "This interview has already started in another connection. Return to that tab or end the interview.");
+    }
     // Repeated start/reconnect returns the original attempt, even after completion.
     if (row.attempt_id && ["in_progress","completed","interrupted","failed"].includes(row.execution_status)) return candidateView(row);
     if (row.execution_status !== "ready") throw new ServiceError(409,"invalid_state");
+    if (live && !service.liveEnabled(row.account_id)) throw new ServiceError(503,"live_pilot_disabled");
     const now = Date.now(), w = row.request.availability;
     if (now < Date.parse(w.opens_at)) throw new ServiceError(409,"interview_not_open");
     if (now >= Math.min(Date.parse(w.last_start_at),Date.parse(row.request.authorization_budget.start_before))) throw new ServiceError(410,"interview_expired");
@@ -62,13 +70,31 @@ export async function startCandidate(service: InterviewService, token: string | 
     if (reserved.active >= ws.concurrency_limit) throw new ServiceError(409,"concurrency_limit");
     if (BigInt(reserved.seconds)+BigInt(used.seconds)+BigInt(seconds) > BigInt(ws.allowance_seconds)) throw new ServiceError(409,"quota_exceeded");
     const attempt = newId("att");
-    await db.query("INSERT INTO service_attempts(id,interview_id,provider,provider_reference,deadline_at) VALUES ($1,$2,'fake',$3,$4)",
-      [attempt,row.id,newId("fake"),new Date(now+seconds*1000)]);
+    await db.query("INSERT INTO service_attempts(id,interview_id,provider,provider_reference,deadline_at,offer_hash,offer_ciphertext,consent_version,consent_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [attempt,row.id,row.execution_provider,newId("pending"),new Date(now+seconds*1000),live ? hashToken(input.sdp!) : null,live ? seal(input.sdp!,service.key) : null,live ? input.consent_version : null,live ? new Date(now) : null]);
     await db.query("INSERT INTO service_reservations(id,workspace_id,interview_id,attempt_id,reserved_seconds,status) VALUES ($1,$2,$3,$4,$5,'reserved')",[newId("res"),row.workspace_id,row.id,attempt,seconds]);
     const updated = (await db.query<InterviewRow>(`UPDATE service_interviews SET attempt_id=$2,execution_status='in_progress',assessment_status='pending',
       resource_version=resource_version+1,updated_at=now() WHERE id=$1 RETURNING *`,[row.id,attempt])).rows[0];
     await db.query("INSERT INTO service_jobs(id,kind,dedupe_key,interview_id) VALUES ($1,'execute',$2,$3)",[newId("job"),`execute:${attempt}`,row.id]);
     await emitEvent(db,updated,"interview.started");
     return candidateView(updated);
+  });
+}
+
+export async function candidateConnection(service: InterviewService, token: string | null) {
+  return transaction(service.pool, async db => {
+    const row = await candidateRow(db,token,false);
+    if (!row.attempt_id) throw new ServiceError(409,"not_started");
+    const attempt = (await db.query("SELECT connection_state,answer_ciphertext,deadline_at FROM service_attempts WHERE id=$1", [row.attempt_id])).rows[0];
+    return { ...candidateView(row), connection_state: attempt.connection_state, deadline_at: attempt.deadline_at.toISOString(),
+      answer: row.execution_status === "in_progress" && attempt.connection_state === "observing" && attempt.answer_ciphertext ? unseal(attempt.answer_ciphertext,service.key) : null };
+  });
+}
+export async function stopCandidate(service: InterviewService, token: string | null) {
+  return transaction(service.pool, async db => {
+    const row = await candidateRow(db,token,true);
+    if (!row.attempt_id || row.execution_provider === "fake") throw new ServiceError(409,"not_started");
+    await db.query("UPDATE service_attempts SET stop_requested_at=coalesce(stop_requested_at,now()),stop_reason=coalesce(stop_reason,'candidate_end') WHERE id=$1 AND ended_at IS NULL", [row.attempt_id]);
+    return { status: "ending" };
   });
 }

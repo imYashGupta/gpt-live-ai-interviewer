@@ -1,6 +1,6 @@
-import { capabilities, type InterviewService } from "./service.ts";
+import { type InterviewService } from "./service.ts";
 import { newId, ServiceError } from "./security.ts";
-import { candidateStatus, exchangeInvitation, startCandidate } from "./candidate.ts";
+import { candidateConnection, candidateStatus, exchangeInvitation, startCandidate, stopCandidate } from "./candidate.ts";
 import type { InterviewRequest } from "./validation.ts";
 
 const responseHeaders = { "Cache-Control":"no-store", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" };
@@ -33,6 +33,12 @@ export async function handleCandidate(request: Request,service: InterviewService
     const url = new URL(request.url);
     if (request.method === "POST" && request.headers.get("origin") !== service.origin) throw new ServiceError(403,"invalid_origin");
     if (request.method === "GET" && url.pathname === "/candidate/session") return json(await candidateStatus(service,candidateToken(request)));
+    if (request.method === "GET" && url.pathname === "/candidate/connection") return json(await candidateConnection(service,candidateToken(request)));
+    if (request.method === "POST" && url.pathname === "/candidate/stop") {
+      const input = await body(request);
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new ServiceError(422,"validation_failed");
+      return json(await stopCandidate(service,candidateToken(request)));
+    }
     if (request.method === "POST" && url.pathname === "/candidate/exchange") {
       const input = await body(request);
       if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k=>k!=="token")) throw new ServiceError(422,"validation_failed");
@@ -41,8 +47,10 @@ export async function handleCandidate(request: Request,service: InterviewService
     }
     if (request.method === "POST" && url.pathname === "/candidate/start") {
       const input = await body(request);
-      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length) throw new ServiceError(422,"validation_failed");
-      return json(await startCandidate(service,candidateToken(request)));
+      if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k=> !["sdp","consent_version"].includes(k))) throw new ServiceError(422,"validation_failed");
+      const offer = input as {sdp?:string;consent_version?:string};
+      if ((offer.sdp !== undefined && typeof offer.sdp !== "string") || (offer.consent_version !== undefined && typeof offer.consent_version !== "string")) throw new ServiceError(422,"validation_failed");
+      return json(await startCandidate(service,candidateToken(request),offer));
     }
     throw new ServiceError(404,"not_found");
   } catch (error) { return errorResponse(error); }
@@ -52,7 +60,7 @@ export async function handleApi(request: Request,service: InterviewService) {
     const p = await service.principal(request.headers.get("authorization"));
     const url = new URL(request.url), path = url.pathname, method = request.method;
     const key = request.headers.get("idempotency-key");
-    if (method === "GET" && path === "/v1/capabilities") return json(capabilities);
+    if (method === "GET" && path === "/v1/capabilities") return json(service.capabilities(p.accountId));
     if (method === "POST" && path === "/v1/workspaces") return json(await service.createWorkspace(p,await body(request) as Parameters<InterviewService["createWorkspace"]>[1],key),201);
     if (method === "POST" && path === "/v1/interviews") return json(await service.createInterview(p,await body(request) as InterviewRequest,key),201);
     if (method === "POST" && path === "/v1/webhook-endpoints") return json(await service.webhookEndpoint(p,await body(request) as Parameters<InterviewService["webhookEndpoint"]>[1],key),201);

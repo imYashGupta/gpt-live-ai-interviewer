@@ -5,7 +5,7 @@ import { createServicePool, migrateService, transaction } from "../lib/interview
 import { provisionAccount, issueCredential, assertId } from "../lib/interview-service/security.ts";
 import { serviceRuntime } from "../lib/interview-service/runtime.ts";
 import { destination, webhookTransport } from "../lib/interview-service/delivery.ts";
-import { runWorkerOnce } from "../lib/interview-service/worker.ts";
+import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
 
 const [command,...args] = process.argv.slice(2);
 let pool;
@@ -48,6 +48,12 @@ try {
     await destination(endpoint.url,(process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean));
     await pool.query("UPDATE service_webhook_endpoints SET status='active' WHERE id=$1",[id]);
     console.log("Endpoint activated. Only newly created events will be delivered.");
+  } else if (command === "attempts") {
+    const result=await pool.query(`SELECT a.id,a.interview_id,a.connection_state,a.started_at,a.deadline_at,a.ended_at,
+      a.stop_reason,i.execution_status,i.usage_status,a.observations->>'captureIncomplete' AS capture_incomplete
+      FROM service_attempts a JOIN service_interviews i ON i.id=a.interview_id
+      WHERE a.provider<>'fake' AND (a.ended_at IS NULL OR i.usage_status='provisional') ORDER BY a.started_at DESC LIMIT 100`);
+    console.table(result.rows);
   } else if (command === "jobs") {
     const result=await pool.query("SELECT id,kind,status,attempts,last_error FROM service_jobs WHERE status<>'done' ORDER BY created_at LIMIT 100");
     console.table(result.rows);
@@ -60,10 +66,28 @@ try {
     const service=serviceRuntime(); pool=service.pool;
     const transport=webhookTransport((process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean));
     let stopping=false; process.on("SIGINT",()=>{stopping=true;}); process.on("SIGTERM",()=>{stopping=true;});
-    console.log("Sandbox worker started. Synthetic data only; zero billable usage.");
-    do { if(!await runWorkerOnce(service,transport)) { if(args.includes("--once")) break; await setTimeout(1000); } }
-    while(!stopping && !args.includes("--once"));
-  } else throw new Error("Command must be migrate, provision, credential, revoke, import-legacy, activate-webhook, jobs, replay, or worker");
+    console.log("Interview worker started. Customer billing is disabled.");
+    if (args.includes("--once")) await runWorkerOnce(service,transport);
+    else {
+      const concurrency = Number(process.env.INTERVIEW_WORKER_CONCURRENCY ?? "4");
+      if (!Number.isInteger(concurrency) || concurrency < 2 || concurrency > 20) throw new Error("Worker concurrency must be 2–20");
+      const active = new Set();
+      while (!stopping) {
+        await expireInvitations(service);
+        if (active.size < concurrency) {
+          const job = await claimJob(service, active.size >= concurrency - 1);
+          if (job) {
+            const work = runClaimedJob(service,job,transport).catch(()=>{ console.error("Worker database operation failed; lease recovery required."); }).finally(()=>active.delete(work));
+            active.add(work);
+            continue;
+          }
+        }
+        await setTimeout(500);
+      }
+      // Graceful shutdown stops intake while active capture continues to its bounded deadline.
+      await Promise.all(active);
+    }
+  } else throw new Error("Command must be migrate, provision, credential, revoke, import-legacy, activate-webhook, jobs, attempts, replay, or worker");
 } catch(error) {
   // Database/transport exceptions can contain credentials. Only show known operator errors.
   console.error(error?.constructor === Error && !error.code ? error.message : "Operation failed. Check database connectivity and service configuration.");

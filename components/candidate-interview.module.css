@@ -1,0 +1,128 @@
+.shell {
+  width: min(720px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 64px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  line-height: 1.65;
+}
+.shell h1,
+.shell h2,
+.shell p {
+  margin: 0;
+}
+.shell h1 {
+  font-size: clamp(32px, 6vw, 44px);
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+}
+.shell h2 {
+  font-size: 23px;
+  line-height: 1.35;
+  letter-spacing: -0.5px;
+}
+.eyebrow {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 32px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+.card > p {
+  color: var(--ink-soft);
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 22px;
+  background: var(--card);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.button:hover:not(:disabled) {
+  border-color: var(--green);
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:focus-visible,
+.consent input:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 4px;
+}
+.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: white;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 12px;
+  background: var(--green-light);
+  font-size: 14px;
+}
+.consent input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 3px 0 0;
+  accent-color: var(--green);
+}
+.audio {
+  width: 100%;
+}
+.audio[hidden] {
+  display: none;
+}
+.message {
+  font-size: 14px;
+  color: var(--ink-soft);
+}
+.message:empty {
+  display: none;
+}
+@media (max-width: 540px) {
+  .shell {
+    padding: 36px 0;
+  }
+  .card {
+    padding: 22px;
+    border-radius: 18px;
+  }
+  .consent {
+    padding: 14px;
+  }
+  .actions,
+  .button {
+    width: 100%;
+  }
+}

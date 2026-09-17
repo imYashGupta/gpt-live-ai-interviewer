@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg";
+import type { LiveOptions } from "./live-provider.ts";
 import { transaction } from "./postgres.ts";
 import { authenticate, assertId, hashToken, newId, newToken, requireScope, seal, ServiceError, unseal, workspace, type Principal } from "./security.ts";
 import { validate, type InterviewRequest } from "./validation.ts";
@@ -11,7 +12,7 @@ export const capabilities = {
 };
 export interface InterviewRow {
   id: string; account_id: string; workspace_id: string; external_reference: string;
-  request: InterviewRequest; resource_version: number; execution_status: string;
+  execution_provider: string; request: InterviewRequest; resource_version: number; execution_status: string;
   assessment_status: string; usage_status: string; attempt_id: string | null; updated_at: Date;
 }
 export function interviewView(row: InterviewRow) {
@@ -40,7 +41,7 @@ export async function recordShadowUsage(db: PoolClient,row: InterviewRow,attempt
   await db.query("SELECT id FROM service_workspaces WHERE id=$1 FOR UPDATE",[row.workspace_id]);
   const settlement = { record_type:"settlement", settlement_id:newId("set"),interview_id:row.id,attempt_id:attemptId,
     workspace_id:row.workspace_id,external_reference:row.external_reference,external_reservation_id:row.request.authorization_budget.external_reservation_id,
-    metric:"interview_seconds",measured_quantity:measured,billable_quantity:0,credit_quantity:"0.000000",rate_card_version:"sandbox_zero_v1",settled_at:new Date().toISOString() };
+    metric:"interview_seconds",measured_quantity:measured,billable_quantity:0,credit_quantity:"0.000000",rate_card_version:row.execution_provider === "fake" ? "sandbox_zero_v1" : "pilot_zero_v1",settled_at:new Date().toISOString() };
   validate("Settlement",settlement);
   await db.query("INSERT INTO service_usage(id,workspace_id,attempt_id,measured_seconds,record) VALUES ($1,$2,$3,$4,$5)",[settlement.settlement_id,row.workspace_id,attemptId,measured,settlement]);
   await emitEvent(db,row,"usage.settled",settlement);
@@ -56,11 +57,17 @@ export class InterviewService {
   pool: Pool;
   key: Buffer;
   origin: string;
-  constructor(pool: Pool, encryptionKey: Buffer, origin: string) {
+  live?: LiveOptions;
+  constructor(pool: Pool, encryptionKey: Buffer, origin: string, live?: LiveOptions) {
+    this.live = live;
     if (encryptionKey.length !== 32) throw new Error("Service encryption key must be 32 bytes");
     const url = new URL(origin);
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Service origin must be an HTTPS origin");
     this.pool = pool; this.key = encryptionKey; this.origin = url.origin;
+  }
+  liveEnabled(accountId: string) { return this.live?.accountIds.includes(accountId) === true; }
+  capabilities(accountId: string) {
+    return this.liveEnabled(accountId) ? { ...capabilities, interviewer_profile_ids: ["pilot_default"], rubric_version_ids: ["pilot_v1"] } : capabilities;
   }
   async principal(header: string | null) { return authenticate(this.pool,header); }
 
@@ -111,12 +118,13 @@ export class InterviewService {
   async createInterview(p: Principal, input: InterviewRequest, key: string | null) {
     requireScope(p,"interviews:write"); validate("CreateInterviewRequest",input);
     try { validateInterviewSemantics(input); } catch { throw new ServiceError(422,"validation_failed","Invalid availability or authorization budget"); }
-    const c = input.configuration;
-    if (c.mode !== "adaptive" || c.language !== "en" || c.interviewer_profile_id !== "sandbox_default" || c.rubric_version_id !== "sandbox_v1") throw new ServiceError(422,"unsupported_configuration");
     return this.command(p,"interview.create",key,input,input.workspace_id,async db => {
+      const c = input.configuration;
+      const caps = this.capabilities(p.accountId);
+      if (c.mode !== "adaptive" || c.language !== "en" || !caps.interviewer_profile_ids.includes(c.interviewer_profile_id) || !caps.rubric_version_ids.includes(c.rubric_version_id)) throw new ServiceError(422,"unsupported_configuration");
       if (Date.parse(input.availability.last_start_at) <= Date.now()) throw new ServiceError(422,"validation_failed","Start window has expired");
-      const result = await db.query<InterviewRow>(`INSERT INTO service_interviews(id,account_id,workspace_id,external_reference,request)
-        VALUES ($1,$2,$3,$4,$5) ON CONFLICT (workspace_id,external_reference) DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input]);
+      const result = await db.query<InterviewRow>(`INSERT INTO service_interviews(id,account_id,workspace_id,external_reference,request,execution_provider)
+        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,external_reference) DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input,this.liveEnabled(p.accountId) ? "openai_live" : "fake"]);
       if (!result.rowCount) throw new ServiceError(409,"external_reference_conflict");
       return interviewView(result.rows[0]);
     });
@@ -147,6 +155,14 @@ export class InterviewService {
       const row = await this.getInterview(db,p,id,true);
       if (row.resource_version !== input.expected_resource_version) throw new ServiceError(409,"version_conflict");
       if (!["ready","in_progress"].includes(row.execution_status)) throw new ServiceError(409,"invalid_state");
+      if (row.attempt_id && row.execution_provider !== "fake") {
+        await db.query("UPDATE service_attempts SET stop_requested_at=coalesce(stop_requested_at,now()),stop_reason='employer_cancel' WHERE id=$1", [row.attempt_id]);
+        const updated = (await db.query<InterviewRow>("UPDATE service_interviews SET execution_status='cancelled',usage_status='provisional',assessment_status='not_requested',resource_version=resource_version+1,updated_at=now() WHERE id=$1 RETURNING *", [id])).rows[0];
+        await db.query("UPDATE service_access_links SET revoked_at=now() WHERE interview_id=$1", [id]);
+        await db.query("UPDATE service_candidate_sessions SET revoked_at=now() WHERE interview_id=$1", [id]);
+        await emitEvent(db,updated,"interview.cancelled");
+        return interviewView(updated);
+      }
       const updated = (await db.query<InterviewRow>(`UPDATE service_interviews SET execution_status='cancelled',assessment_status='not_requested',usage_status='settled',resource_version=resource_version+1,updated_at=now() WHERE id=$1 RETURNING *`,[id])).rows[0];
       await db.query("UPDATE service_access_links SET revoked_at=now() WHERE interview_id=$1",[id]);
       await db.query("UPDATE service_candidate_sessions SET revoked_at=now() WHERE interview_id=$1",[id]);

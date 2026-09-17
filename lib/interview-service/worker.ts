@@ -1,4 +1,3 @@
-import type { PoolClient } from "pg";
 import { transaction } from "./postgres.ts";
 import { newId, unseal } from "./security.ts";
 import { emitEvent, recordShadowUsage, type InterviewRow, type InterviewService } from "./service.ts";
@@ -8,25 +7,15 @@ import { validate } from "./validation.ts";
 import { signWebhook } from "./webhook-signature.ts";
 import type { WebhookTransport } from "./delivery.ts";
 
-export interface Job { id: string; kind: string; interview_id: string; event_id: string; endpoint_id: string; lease_token: string; attempts: number }
-export async function claimJob(service: InterviewService): Promise<Job | null> {
-  return transaction(service.pool,async db => {
-    const row = (await db.query(`SELECT * FROM service_jobs WHERE (status='pending' AND available_at<=now())
-      OR (status='running' AND lease_until<now()) ORDER BY available_at,created_at FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
-    if (!row) return null;
-    return (await db.query<Job>(`UPDATE service_jobs SET status='running',attempts=attempts+1,lease_token=$2,
-      lease_until=now()+interval '30 seconds' WHERE id=$1 RETURNING *`,[row.id,newId("lease")])).rows[0];
-  });
-}
-async function ownsLease(db: PoolClient,job: Job): Promise<boolean> {
-  return Boolean((await db.query("SELECT id FROM service_jobs WHERE id=$1 AND status='running' AND lease_token=$2 AND lease_until>now() FOR UPDATE",[job.id,job.lease_token])).rowCount);
-}
-async function finishJob(db: PoolClient,job: Job) {
-  await db.query("UPDATE service_jobs SET status='done',lease_token=NULL,lease_until=NULL,last_error=NULL WHERE id=$1 AND lease_token=$2",[job.id,job.lease_token]);
-}
+import { claimJob, ownsLease, finishJob, type Job } from "./job-leases.ts";
+import { executeLive, assessLive } from "./live-worker.ts";
+export { claimJob } from "./job-leases.ts";
+export type { Job } from "./job-leases.ts";
+
 async function execute(service: InterviewService,job: Job) {
   const attempt = (await service.pool.query("SELECT * FROM service_attempts WHERE interview_id=$1",[job.interview_id])).rows[0];
-  if (!attempt || attempt.provider !== "fake") throw new Error("Unsupported execution adapter");
+  if (!attempt) throw new Error("Missing attempt");
+  if (attempt.provider !== "fake") return executeLive(service,job);
   const provider = new SandboxExecutionProvider();
   for await (const event of provider.observe({providerReference:attempt.provider_reference})) {
     const keepGoing = await transaction(service.pool,async db => {
@@ -59,6 +48,8 @@ async function execute(service: InterviewService,job: Job) {
   });
 }
 async function assess(service: InterviewService,job: Job) {
+  const mode = (await service.pool.query("SELECT execution_provider FROM service_interviews WHERE id=$1", [job.interview_id])).rows[0];
+  if (mode?.execution_provider !== "fake") return assessLive(service,job);
   await transaction(service.pool,async db => {
     if (!await ownsLease(db,job)) return;
     const row = (await db.query<InterviewRow>("SELECT * FROM service_interviews WHERE id=$1 FOR UPDATE",[job.interview_id])).rows[0];
@@ -95,10 +86,19 @@ export async function runClaimedJob(service: InterviewService,job: Job,transport
     else if (job.kind === "deliver") await deliver(service,job,transport);
     else throw new Error("Unknown job");
   } catch {
+    if (job.kind === "assess" && job.attempts >= 3) {
+      await transaction(service.pool,async db => {
+        if (!await ownsLease(db,job)) return;
+        const updated = (await db.query<InterviewRow>("UPDATE service_interviews SET assessment_status='failed',resource_version=resource_version+1,updated_at=now() WHERE id=$1 AND assessment_status NOT IN ('ready','insufficient_evidence','not_requested') RETURNING *",[job.interview_id])).rows[0];
+        if (updated) await emitEvent(db,updated,"result.failed");
+        await db.query("UPDATE service_jobs SET status='dead',lease_token=NULL,lease_until=NULL,last_error='assessment_failed' WHERE id=$1 AND lease_token=$2",[job.id,job.lease_token]);
+      });
+      return;
+    }
     // Persist only an operational code: exceptions can contain PII, keys or destination URLs.
     await service.pool.query(`UPDATE service_jobs SET status=CASE WHEN attempts>=6 THEN 'dead' ELSE 'pending' END,
       available_at=now()+($3*interval '1 second'),lease_token=NULL,lease_until=NULL,last_error='job_failed'
-      WHERE id=$1 AND lease_token=$2`,[job.id,job.lease_token,Math.min(300,2**job.attempts)+Math.floor(Math.random()*3)]);
+      WHERE id=$1 AND lease_token=$2 AND lease_until>now()`,[job.id,job.lease_token,Math.min(300,2**job.attempts)+Math.floor(Math.random()*3)]);
   }
 }
 export async function expireInvitations(service: InterviewService) {

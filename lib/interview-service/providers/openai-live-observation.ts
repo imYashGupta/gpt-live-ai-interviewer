@@ -1,5 +1,5 @@
 import type { ConnectServerEvent } from "openai/resources/live/sideband/sideband";
-import type { Observation, ProviderCapabilities } from "../provider";
+import type { Observation, ProviderCapabilities } from "../provider.ts";
 
 /** Source/SDK capabilities, not a claim that live recovery has been verified. */
 export const openaiLiveCapabilities: ProviderCapabilities = {

@@ -1,6 +1,6 @@
 # Recooty AI interview integration: phased implementation plan
 
-Revision: 2026-09-16. Phase 1 contract foundations and Phase 2 PostgreSQL sandbox foundations implemented; live execution integration and ATS UI remain pending.
+Revision: 2026-09-17. Provider-neutral contract, PostgreSQL foundations, Recooty sandbox integration, and gated live-room/worker implementation are in place. Real-provider acceptance and production rollout gates remain open.
 
 ## 1. Goal and boundaries
 
@@ -391,3 +391,17 @@ Next implementation unit: **Phase 2 PostgreSQL migrations, organization/workspac
 8. Disabling the feature blocks new UI actions while existing inbox/status/usage reconciliation continues. New queued creates stop; already-issued service links need explicit cancellation when rolling back. Do not purge mapping/ledger rows. Candidate/team hard deletion is restricted while integration mappings exist; service deletion/retention remains a prerequisite for production use.
 
 Setup for the service process and Herd PostgreSQL remains in the interviewer repository's `INTERVIEW_SERVICE_SETUP.md`.
+
+
+## 13. Live execution implementation — unbilled internal pilot
+
+- Connected a consent-based candidate audio room to persisted attempts. The room receives transport SDP only; the service owns provider credentials, instructions, capture, usage, stop requests and assessment. Browser transcript/usage/report submissions are not accepted on this path.
+- Added private live execution and assessment interfaces, OpenAI SDK adapters, provider command restrictions, encrypted ephemeral SDP, pinned per-interview routing, deterministic transcript turns, evidence validation, background results and the existing signed outbox flow. Recooty's API contract and implementation are unchanged.
+- Added migration 002 and applied it to the existing Herd interview database without rewriting migration 001. Existing synthetic interviews remain synthetic. Live mode requires an explicit flag plus service-account allowlist; defaults remain off and customer billing remains zero.
+- Added renewable capture leases, duration/stop supervision, bounded concurrent jobs with capacity for delivery, safe recovery after worker loss, provisional unknown usage and held quota reservations. Creation responses with unknown outcome are quarantined rather than creating another provider session. Remote stop failures remain retryable and assessment failures become visible after three attempts.
+- Recovery is conservative: interrupted observers are stopped, incomplete evidence receives no scores, and changing/reloading a browser connection cannot silently create a second attempt. Seamless media rejoin and provider event replay are not claimed.
+- Added `attempts` operator inspection for active and provisional cases. Deployment/rollback requirements, real-provider acceptance checks and exact limitations are in `INTERVIEW_SERVICE_SETUP.md`.
+
+Verification: 51 unit/contract/transport tests passed, plus 23 PostgreSQL tests on temporary schemas in the existing Herd instance. Lint, TypeScript and production build passed. Candidate consent controls were checked in a separate browser with synthetic session responses; no microphone or paid provider session was used. An additive local service migration was applied; no Recooty application migration, rollout, invitation or customer charge was performed.
+
+**Next acceptance gate:** run a bounded real-provider interview and confirm audio, stop behavior, final usage, report and callback/poll recovery end to end with an internal Recooty team. Then complete the remaining Phase 2 lifecycle/privacy and Phase 4 billing prerequisites. Local mocked-provider verification does not establish production readiness.

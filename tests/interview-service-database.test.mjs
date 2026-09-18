@@ -202,6 +202,30 @@ test('PostgreSQL service integration on configured server', {skip:!connection}, 
       assert.equal(delivered.id,event.event_id);
       stored=(await pool.query('SELECT * FROM service_jobs WHERE id=$1',[event.id])).rows[0]; assert.equal(stored.status,'done');
     });
+    await t.test('lost receiver acknowledgment survives restart without changing event or settlement identity',async()=>{
+      const delivery=(await pool.query("SELECT * FROM service_jobs WHERE kind='deliver' AND event_id IN (SELECT id FROM service_events WHERE body::jsonb->>'type'='result.ready') LIMIT 1")).rows[0];
+      const usageBefore=(await pool.query('SELECT count(*)::integer AS n FROM service_usage')).rows[0].n;
+      await pool.query("UPDATE service_jobs SET status='pending',attempts=0,available_at=now() WHERE id=$1",[delivery.id]);
+      const received=[];
+      const lost=await claimJob(service);
+      assert.equal(lost.id,delivery.id);
+      await runClaimedJob(service,lost,async(_url,body,headers)=>{
+        received.push({body,headers});
+        throw new Error('Receiver accepted the event but the acknowledgment was lost');
+      });
+      const pending=(await pool.query('SELECT status,available_at FROM service_jobs WHERE id=$1',[delivery.id])).rows[0];
+      assert.equal(pending.status,'pending');
+      assert.ok(new Date(pending.available_at).getTime()>Date.now());
+      await pool.end();pool=createServicePool(connection,schema);service=new InterviewService(pool,encryptionKey,origin);
+      await pool.query('UPDATE service_jobs SET available_at=now() WHERE id=$1',[delivery.id]);
+      await runWorkerOnce(service,async(_url,body,headers)=>received.push({body,headers}));
+      assert.equal(received.length,2);
+      assert.equal(received[0].body,received[1].body);
+      assert.equal(received[0].headers['Interview-Event-Id'],received[1].headers['Interview-Event-Id']);
+      assert.equal(JSON.parse(received[1].body).id,delivery.event_id);
+      assert.equal((await pool.query('SELECT status FROM service_jobs WHERE id=$1',[delivery.id])).rows[0].status,'done');
+      assert.equal((await pool.query('SELECT count(*)::integer AS n FROM service_usage')).rows[0].n,usageBefore);
+    });
   } finally {
     await pool?.end();
     // This identifier is generated locally; no configured/public schema is ever dropped.

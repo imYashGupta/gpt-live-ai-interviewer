@@ -153,3 +153,12 @@ The worker supplies the persisted deadline to a provider-neutral `updateTimeRema
 Candidate End disables microphone input immediately but keeps WebRTC alive while the server requests and confirms provider closure. The browser waits at most 15 seconds, then releases media and shows either terminal status or a retry message. This preserves authoritative final usage and completion instead of deliberately causing a transport interruption. The wrap-up/countdown and terminal messages reflect the service lifecycle. Real network/capture failures remain interrupted; historical results are unchanged.
 
 Verified with two bounded generated-speech runs: quick/overlapping answers continued to the two-minute deadline and completed automatically; a separate run spoke the closing and completed normally through the candidate End button at about 47 seconds. Both settled usage and produced ready assessments, with zero customer charges. Broader human conversation, failure recovery and public webhook acceptance still need coverage. Restart the service worker and refresh the candidate page before creating new attempts with these fixes.
+
+
+## Recooty report/usage recovery acceptance (2026-09-18)
+
+The local report-delivery slice now reuses the completed CloudTech pilot. Authenticated polling recovered its ready assessment and transcript plus one zero-charge settlement (117 measured seconds). Repeated/delayed callbacks, API outages and lost delivery acknowledgment across restart are covered by focused tests. Actual public HTTPS delivery remains unverified.
+
+Recooty requires its additive `2026_09_18_171835_create_ai_interview_usage_inbox_table.php` migration before running the updated worker. It durably receives encrypted usage pages before advancing its cursor, then imports records separately. `interviews:reconcile` reports unresolved inbox records; inspect their `last_error` and reconcile ownership before taking action. `mapping_pending` can resolve after a missing interview/attempt mapping syncs; `usage_validation_failed` requires checking identity, quantities and charge policy. Unmapped service-only records must never be assigned to unrelated applications. Existing settled usage remains deduplicated.
+
+Local reconciliation imported all eight mapped records and retained the one service-only manual test as pending review. The candidate page and provider path were not changed by this recovery work. See section 16 of `AI_INTERVIEW_INTEGRATION_PLAN.md` for exact acceptance evidence and remaining gates.

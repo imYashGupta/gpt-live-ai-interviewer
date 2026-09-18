@@ -1,42 +1,35 @@
 # AI interview integration: resume checkpoint
 
-Updated: 2026-09-18. This is an observed-state checkpoint, not permission to expand task scope. Read NEXT_TASK_HANDOFF.md for architecture, setup and detailed acceptance evidence.
+Updated: 2026-09-18. Read NEXT_TASK_HANDOFF.md and plan section 16 for details. This records observed state, not authorization to expand scope.
 
-## Current objective and status
+## Objective and completed work
 
-- Latest user request: make usage-limit interruptions recoverable without losing track of work.
-- Recovery instructions and this checkpoint are installed in the two project instruction chains.
-- Product fixes are complete and committed: server-controlled pacing/closing and graceful candidate End.
-- Recommended next product task: Phase 3 report delivery and outage/polling recovery acceptance. It has not started; the user plans to continue it in a new chat.
+- Phase 3 local report-delivery/recovery slice implemented and verified; public HTTPS webhook/deployed acceptance remains deferred. User permits local HTTP Recooty, with HTTPS planned for production; destination protections remain unchanged.
+- Recooty independently recovers report and usage, persists encrypted usage pages before cursor advancement, imports valid records separately, retains unresolved ownership/validation records, and displays/polls report/usage delivery states after execution ends.
+- Existing authenticated CloudTech pilot recovered on its correct application: ready report revision 1, 13 transcript turns, 3 competencies; one settlement with 117 measured seconds and zero billable seconds. No new provider session, email, charge, push or deployment.
+- Cursor-based interview listing not needed for these gaps. Existing mappings and idempotent commands suffice; broader discovery remains deferred. No external contract or pinned schema changes.
 
-## Repositories and verified commits
+## Branches and working trees
 
-- `/Users/yashgupta/WORK/gpt-live-ai-interviewer`, branch `codex/ai-interview-integration`.
-  - `9d5652e`: timing, closing speech and intentional completion fixes.
-  - `f0c7b1e`: detailed next-task handoff.
-- `/Users/yashgupta/Laravel/recooty`, same branch.
-  - `63e6e3d3d`: matching timing/completion verification notes.
-  - `065b512e2`: resume checkpoint instructions.
-- Unrelated changes to preserve: service `tsconfig.tsbuildinfo` (untracked), Recooty `composer.lock` (modified).
+- Service: `/Users/yashgupta/WORK/gpt-live-ai-interviewer`, `codex/ai-interview-integration`.
+- ATS: `/Users/yashgupta/Laravel/recooty`, same branch.
+- ATS recovery commit: `2d38657de`. Service grouped commit: `test(interview-service): verify phase 3 delivery recovery` (contains this checkpoint; resolve its hash with git log). Prior checkpoint commit was `22cb024`.
+- Preserve unrelated service `tsconfig.tsbuildinfo` (untracked) and ATS `composer.lock` (modified).
 
-## Verification already completed
+## Verification
 
-- 55 service unit/contract/transport tests; 24 integration tests on existing Herd PostgreSQL.
-- Lint and TypeScript passed. Final transport guards were checked separately afterward.
-- Two-minute generated-speech interview completed automatically with ready assessment and settled usage.
-- Separate generated-speech attempt ended through the candidate button at about 47 seconds: completed, candidate_end, assessment ready, usage settled.
-- No customer charges, invitation email, push or deployment. Historical interrupted attempts remain unchanged.
+- Service: 55 unit/contract/transport tests, 25 integration tests on existing Herd PostgreSQL; lint/typecheck passed. Outbox lost-acknowledgment/restart replay preserves event and settlement identity.
+- ATS: 34 focused tests / 234 assertions; Pint, Prettier and Vite build passed. Global TypeScript has unchanged 1,112 baseline errors, none in changed files. Existing Sentry source-map project error remains unrelated.
+- Browser: real report/transcript/usage verified. Browser-only mocked responses verified terminal polling and open-report refresh across pending, failed/provisional and recovered states. All temporary routes removed; real data restored.
 
-## Pending operations / environment
+## Runtime and unresolved records
 
-- No live test or pending destructive/external operation was left running at the last check.
-- Development services were left running: Next HTTPS dev server; service worker last observed PID 90484; dedicated ATS queue worker last observed PID 7019. Recheck process identity and active attempts before any restart; PIDs and tool session handles are not durable.
-- Service origin `https://interview-bot.test:3000`; ATS `http://recooty.test`; CloudTech team 1 only.
-- The earlier automatic approval usage-limit block cleared after the user resumed. Do not assume a new rejection can be bypassed.
-- Service checkpoint/instruction installation is ready for its grouped documentation commit. Check Git history for `docs: add durable integration resume checkpoint` before retrying; this file is included in that commit.
+- Only local ATS migration `2026_09_18_171835_create_ai_interview_usage_inbox_table.php` applied. No service migration needed.
+- Dedicated ATS queue worker 7019 gracefully replaced by PID 73182 (tool session 93880); queue `{ai-interview-pilot}`. Next PID 4218 and service worker PID 90484 were preserved. Recheck identity before stopping anything.
+- No active service attempts at runtime inspection. ATS reconciliation ran with zero pending commands; all integration mappings are team 1.
+- Usage inbox: nine received, eight imported, one `mapping_pending` service-only test (`set_db1d1d5300740ba7029bdc11a41d5746`, `int_dc441a06a9a6241bf497bf5ee8fdcc8c`). It has no ATS row and must not be assigned arbitrarily. It no longer blocks other records or cursor advancement.
 
-## Next safe action
+## Pending / next safe action
 
-1. When the user starts the next product task: read this checkpoint, NEXT_TASK_HANDOFF.md and applicable AGENTS.md files; check current git state and verify the documentation commit above.
-2. Inspect existing Recooty result delivery/reconciliation before implementing changes. Use existing synthetic results where possible. Keep paid billing disabled and use Herd PostgreSQL.
-3. Update this file to the actual active objective before beginning new work. Clear resolved pending operations rather than keeping a growing log.
+- Both grouped commits completed; no pending runtime operations or unverified implementation. This checkpoint is included in the service commit.
+- Local slice is complete. Next task: approved public HTTPS delivery/deployed outage acceptance when a receiver exists; otherwise deferred candidate MVP presentation or lifecycle/privacy work under a new request. Do not enable paid billing.

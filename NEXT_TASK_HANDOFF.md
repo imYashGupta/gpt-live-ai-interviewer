@@ -1,17 +1,15 @@
 # Next task handoff: Recooty AI interview integration
 
-Updated 2026-09-18. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–15) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
+Updated 2026-09-18. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–16) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
 
 ## Recommended next task
 
-Finish the **Phase 3 result-delivery and recovery acceptance slice** before starting paid billing. The live interview path is working locally, including spoken opening, quick/overlapping answers, timed closing, intentional End, background assessment, and usage settlement. The next priority is proving the recruiter reliably receives the correct report and usage after an outage, with clear pending/failed states.
+The **local Phase 3 report-delivery and recovery slice is complete**. See section 16 of AI_INTERVIEW_INTEGRATION_PLAN.md for evidence. Public webhook delivery and the deployed outage gate remain open; do not enable paid billing yet.
 
-1. Inspect current Recooty reconciliation/inbox/command processing and service outbox behavior before changing anything. Much of this is already implemented and tested.
-2. Verify a completed live pilot's transcript, assessment and usage on its correct Recooty application using authenticated APIs/UI. Use existing internal test results when possible; do not repeatedly run paid interviews to prove the same behavior.
-3. Exercise delayed/missed callbacks, repeated delivery, out-of-order events and polling recovery. Cover report-pending/failed and usage-provisional states. Add focused tests or fix concrete gaps uncovered; preserve resource-version and settlement deduplication.
-4. Determine whether the missing cursor-based interview listing is needed for the identified recovery gaps. If implementing it, keep it tenant-scoped, provider-neutral and capability/contract compatible; update canonical schemas and the Recooty pinned snapshot together. Do not assume every proposed endpoint in the plan already exists.
-5. Local/private webhook delivery is deliberately blocked. Complete all local/stubbed checks first. Actual signed webhook delivery needs an authorized, controlled public HTTPS staging receiver. Ask for missing staging details only when needed; do not disable SSRF/TLS protections or claim local mocks prove this gate.
-6. Update the phase plan with exact delivered behavior and remaining gates. Commit related changes, one meaningful commit per repository where practical. Do not enable customer charging, send candidate emails, deploy, or push as part of this slice.
+1. If an approved controlled public HTTPS receiver is available, finish actual signed webhook delivery/outage acceptance, ownership verification and signing-key rotation. The user confirmed local Recooty may stay HTTP and production will use HTTPS; this does not establish a staging receiver or permission to remove destination protections. Local signed-request tests and injected delivery tests passed, but do not prove public delivery.
+2. If staging remains unavailable, the next useful independent slice is the deferred candidate presentation: restore the preferred original MVP look while retaining service-owned capture, timing, completion, assessment and metering. Broader lifecycle/privacy/retention prerequisites also remain before production or paid allowances.
+3. Keep using existing synthetic results and existing Herd PostgreSQL. Do not create paid sessions solely to re-prove report delivery; do not send invitations, push, deploy or enable charging without a new request.
+4. Keep the canonical checkpoint current and commit related changes at meaningful boundaries on the existing branches.
 
 The user preferred the original MVP UI, but explicitly accepted deferring that work. A subsequent candidate-experience slice should reuse its presentation while retaining the new service-owned session/evidence/metering flow. Do not copy the MVP's browser-authoritative provider controls into the integrated room.
 
@@ -47,7 +45,7 @@ Read AGENTS.md in each repository. The service uses Next 16.3 with breaking chan
 
 - Phase 1: provider-neutral contract, fixtures, normalizers and consumer/provider tests implemented.
 - Phase 2: PostgreSQL tenancy, durable jobs, reservations, scoped admission, trusted live capture, assessment, outbox and conservative recovery implemented. The broader phase is not fully complete: planning, lifecycle/privacy, reconciliation and operational prerequisites remain.
-- Phase 3: Recooty integration and a CloudTech-only unbilled local live pilot work. Report/usage polling has been verified. Public webhook and broader failure/deployed acceptance gates remain open.
+- Phase 3: CloudTech-only unbilled live pilot and local report/usage outage recovery are verified. Durable usage inbox isolates stale/unmapped records; terminal UI polling and pending/failed/provisional states are tested. Public webhook and deployed acceptance gates remain open.
 - Phase 4: paid subscription allowances, real debit/grant policy and retail settlement enforcement not started/completed.
 - Later: full AI fixed/slot scheduling, production hardening, standalone client UI and a second real provider.
 
@@ -62,6 +60,8 @@ Service commits:
 - `2a974f3` feat(interview-service): connect live rooms to durable execution
 
 Recooty commits:
+
+- `2d38657de`: independent report recovery, durable usage inbox, terminal delivery UI/polling and Phase 3 regressions.
 
 - `63e6e3d3d` docs(interview-service): record timing and completion verification
 - `4a221c2a5` fix(interview-service): support link actions on local HTTP origins
@@ -125,7 +125,7 @@ At handoff the following processes were running (PIDs/session handles can change
 
 - Next HTTPS dev process, originally PID 4218
 - Service worker PID 90484, started with `npm run service:worker`
-- Dedicated ATS worker PID 7019:
+- Dedicated ATS worker PID 73182 (replaced 7019 after the Phase 3 usage migration):
   `php artisan queue:work ai --queue='{ai-interview-pilot}' --sleep=1 --timeout=160 --tries=1 --no-interaction`
 
 Before restarting the service worker, inspect active attempts; graceful shutdown drains work. Do not kill unrelated processes. Full ATS scheduler/Horizon was not started by this task.
@@ -155,7 +155,7 @@ node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview
 Playwright CLI skill/wrapper was used with session `pilot-debug` from `/tmp`. Session tabs may have been closed/recreated by the user; inspect before acting. User had normally signed in to Recooty earlier. If expired, ask for normal sign-in; never forge auth. Do not close unrelated tabs or the entire browser.
 
 - Internal pilot application: `http://recooty.test/jobs/social-media-intern-cl103/application/28b5733aea38be3d`, application 117, synthetic candidate under CloudTech's Social Media Intern role.
-- Two-minute automatic completion: service interview `int_849548f0ef5aef8266d7cf43afc807a5`; ATS interview `b124bb1b-19dd-4c6e-9492-f9be6357983a`. Its link was rotated during browser-session recovery; completed links cannot restart. It may need normal **Sync status** in Recooty to fetch the latest result.
+- Two-minute automatic completion: service interview `int_849548f0ef5aef8266d7cf43afc807a5`; ATS interview `b124bb1b-19dd-4c6e-9492-f9be6357983a`. Its link was rotated during browser-session recovery; completed links cannot restart. Verified through normal **Sync status** and recruiter UI: ready revision 1, 13 transcript turns, one settlement with 117 measured seconds and zero billable seconds.
 - Manual completion: service interview `int_dc441a06a9a6241bf497bf5ee8fdcc8c`. Created through the authenticated service API using the internal test configuration; it has no corresponding ATS interview row. Do not expect it to appear in the ATS UI.
 - Older pilot attempts intentionally remain interrupted/insufficient-evidence as recorded before the fix.
 - Generated speech files and browser diagnostic scripts were under `/tmp`, not source assets. Do not depend on them existing or include invitation tokens in the handoff.
@@ -167,3 +167,13 @@ Playwright CLI skill/wrapper was used with session `pilot-debug` from `/tmp`. Se
 - Public webhook verification, ownership challenge and producer secret rotation are unfinished; local private-address delivery must remain blocked.
 - Reviewed plans, rescheduling/listing gaps, private artifacts, retention/deletion, environment separation, rate limits, provider cost calibration and paid allowance enforcement remain in the broader plan.
 - Do not promise full production readiness, automatically alter hiring outcomes, silently relabel historical interrupted attempts, or expose candidate data in logs/handoff documents.
+
+## Phase 3 recovery implementation and local operations
+
+- Recooty independently retries report and usage delivery. Listings distinguish remote status from local availability; UI continues refreshing incomplete delivery after execution ends and refreshes the open report.
+- `ai_interview_usage_inbox` stores encrypted records before cursor advancement. Valid mapped records enter the existing deduplicated ledger independently. Unknown/missing mappings remain `mapping_pending`; failed identity/quantity/charge checks remain `usage_validation_failed`. They stay unprocessed and retry on later workspace syncs; `interviews:reconcile` shows the pending count. Resolve ownership against authoritative service state; never attach unmatched usage arbitrarily or edit settled quantities to force import.
+- Local-only migration applied: `2026_09_18_171835_create_ai_interview_usage_inbox_table.php`. Dedicated pilot worker restarted; service/Next workers unchanged. On another environment, migrate before starting workers with this code. No public contract or pinned schema change was necessary.
+- Local inbox: nine records received, eight imported, one service-only manual test remains pending (`set_db1d1d5300740ba7029bdc11a41d5746`, interview `int_dc441a06a9a6241bf497bf5ee8fdcc8c`). It has no ATS interview and is not a missing report for the pilot application.
+- Browser-only response simulations verified terminal polling across pending, failed/provisional and recovered states, including an already-open report; real responses were restored afterward.
+- Verification: 34 focused ATS tests / 234 assertions, 55 service unit/contract/transport tests and 25 Herd PostgreSQL integration tests. Service lint/typecheck, ATS Pint/build passed. ATS global typecheck has its unchanged 1,112 baseline diagnostics, none in changed files; Sentry source-map upload still reports its pre-existing project error.
+- No new interview/provider session, invitation email, charge, push or deployment was performed in this slice. Cursor-based interview discovery remains deferred because existing mappings and durable command retries cover these recovery cases.

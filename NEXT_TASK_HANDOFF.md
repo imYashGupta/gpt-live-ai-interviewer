@@ -1,6 +1,6 @@
 # Next task handoff: Recooty AI interview integration
 
-Updated 2026-09-18. Read this first, then the applicable AGENTS.md files and the latest sections (14–15) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
+Updated 2026-09-18. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–15) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
 
 ## Recommended next task
 

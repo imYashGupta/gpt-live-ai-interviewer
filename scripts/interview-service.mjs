@@ -8,6 +8,8 @@ import { destination, webhookTransport } from "../lib/interview-service/delivery
 import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
 
 const [command,...args] = process.argv.slice(2);
+const webhookHosts=(process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean);
+const production=process.env.NODE_ENV === "production";
 let pool;
 try {
   if (!process.env.INTERVIEW_DATABASE_URL) throw new Error("Set INTERVIEW_DATABASE_URL to your dedicated database on Herd's PostgreSQL server");
@@ -45,7 +47,7 @@ try {
     const id=assertId(args[0] ?? "");
     const endpoint=(await pool.query("SELECT url FROM service_webhook_endpoints WHERE id=$1 AND status='pending_verification'",[id])).rows[0];
     if(!endpoint) throw new Error("Pending endpoint not found");
-    await destination(endpoint.url,(process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean));
+    await destination(endpoint.url,webhookHosts,production);
     await pool.query("UPDATE service_webhook_endpoints SET status='active' WHERE id=$1",[id]);
     console.log("Endpoint activated. Only newly created events will be delivered.");
   } else if (command === "attempts") {
@@ -64,7 +66,7 @@ try {
   } else if (command === "worker") {
     await pool.end(); pool=undefined;
     const service=serviceRuntime(); pool=service.pool;
-    const transport=webhookTransport((process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean));
+    const transport=webhookTransport(webhookHosts,production);
     let stopping=false; process.on("SIGINT",()=>{stopping=true;}); process.on("SIGTERM",()=>{stopping=true;});
     console.log("Interview worker started. Customer billing is disabled.");
     if (args.includes("--once")) await runWorkerOnce(service,transport);

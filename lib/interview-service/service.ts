@@ -4,6 +4,7 @@ import { transaction } from "./postgres.ts";
 import { authenticate, assertId, hashToken, newId, newToken, requireScope, seal, ServiceError, unseal, workspace, type Principal } from "./security.ts";
 import { validate, type InterviewRequest } from "./validation.ts";
 import { validateInterviewSemantics } from "./contract-rules.ts";
+import { webhookUrl } from "./delivery.ts";
 
 export const capabilities = {
   schema_version: "1.0", modes: ["adaptive"], modalities: ["audio"], languages: ["en"],
@@ -196,8 +197,12 @@ export class InterviewService {
   async webhookEndpoint(p: Principal,input: {url: string; event_types: string[]},key: string | null) {
     requireScope(p,"webhooks:write"); if (p.workspaceId) throw new ServiceError(403,"forbidden");
     validate("WebhookEndpointRequest",input);
-    const url = new URL(input.url);
-    if (url.username || url.password || url.hash || url.port && url.port !== "443") throw new ServiceError(422,"validation_failed");
+    let url: URL;
+    try {
+      url = webhookUrl(input.url);
+    } catch {
+      throw new ServiceError(422,"validation_failed");
+    }
     return this.command(p,"webhook.create",key,input,null,async db => {
       const secret = newToken("whsec"); const id = newId("we");
       const inserted = await db.query(`INSERT INTO service_webhook_endpoints(id,account_id,url,secret_ciphertext,event_types)

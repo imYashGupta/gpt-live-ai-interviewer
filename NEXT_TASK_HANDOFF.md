@@ -1,12 +1,12 @@
 # Next task handoff: Recooty AI interview integration
 
-Updated 2026-09-18. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–16) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
+Updated 2026-09-19. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–17) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
 
 ## Recommended next task
 
-The **local Phase 3 report-delivery and recovery slice is complete**. See section 16 of AI_INTERVIEW_INTEGRATION_PLAN.md for evidence. Public webhook delivery and the deployed outage gate remain open; do not enable paid billing yet.
+The **local Phase 3 report-delivery and recovery slice is complete**. See sections 16–17 of AI_INTERVIEW_INTEGRATION_PLAN.md. Real signed HTTP delivery and retry after a bounded local receiver outage passed against Recooty. Public production delivery and the deployed outage gate remain open. Do not enable paid billing yet.
 
-1. If an approved controlled public HTTPS receiver is available, finish actual signed webhook delivery/outage acceptance, ownership verification and signing-key rotation. The user confirmed local Recooty may stay HTTP and production will use HTTPS; this does not establish a staging receiver or permission to remove destination protections. Local signed-request tests and injected delivery tests passed, but do not prove public delivery.
+1. When an approved public HTTPS receiver is available, repeat signed delivery and deployed outage acceptance in production mode, then implement ownership verification and signing-key rotation. Exact-host allowlisting and the public IPv4 HTTPS/443 policy remain required.
 2. If staging remains unavailable, the next useful independent slice is the deferred candidate presentation: restore the preferred original MVP look while retaining service-owned capture, timing, completion, assessment and metering. Broader lifecycle/privacy/retention prerequisites also remain before production or paid allowances.
 3. Keep using existing synthetic results and existing Herd PostgreSQL. Do not create paid sessions solely to re-prove report delivery; do not send invitations, push, deploy or enable charging without a new request.
 4. Keep the canonical checkpoint current and commit related changes at meaningful boundaries on the existing branches.
@@ -164,7 +164,7 @@ Playwright CLI skill/wrapper was used with session `pilot-debug` from `/tmp`. Se
 
 - Seamless reconnect/provider replay is not implemented. Reload cannot restore a live media attempt; recovery stops uncertain sessions rather than duplicating them.
 - Provider sessions may cost money even though customer charge is zero. Use mocks for routine tests and bounded internal live checks only when needed.
-- Public webhook verification, ownership challenge and producer secret rotation are unfinished; local private-address delivery must remain blocked.
+- Public webhook verification, ownership challenge and producer secret rotation are unfinished. Local private-address delivery is allowed only outside production and only for exact allowlisted hosts; production remains public HTTPS-only.
 - Reviewed plans, rescheduling/listing gaps, private artifacts, retention/deletion, environment separation, rate limits, provider cost calibration and paid allowance enforcement remain in the broader plan.
 - Do not promise full production readiness, automatically alter hiring outcomes, silently relabel historical interrupted attempts, or expose candidate data in logs/handoff documents.
 

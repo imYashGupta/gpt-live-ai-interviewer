@@ -100,6 +100,13 @@ test('credit quantities are exact decimal strings and external payloads contain 
   }
 });
 
+test('webhook contract permits local HTTP while runtime policy controls its environment', () => {
+  const request = fixture('webhook-request'); request.url = 'http://recooty.test/api/interview-service/webhook';
+  assert.equal(validate('WebhookEndpointRequest', request).valid, true);
+  const endpoint = fixture('webhook-endpoint'); endpoint.url = request.url;
+  assert.equal(validate('WebhookEndpoint', endpoint).valid, true);
+});
+
 test('webhook signing matches the PHP consumer vector byte for byte', () => {
   const v = fixture('signature-vector');
   const headers = signWebhook(v.body, v.event_id, Number(v.timestamp), v.secret);

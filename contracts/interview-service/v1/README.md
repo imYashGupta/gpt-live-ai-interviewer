@@ -119,6 +119,13 @@ rest; API credential hashes are a separate concern. Artifacts need authenticated
 authorization before issuing short-lived URLs. Account creation, service-credit grants,
 rubric/profile administration, and candidate-room APIs remain internal surfaces.
 
+Webhook URLs may use HTTP in development/test so explicitly allowlisted local ATS
+receivers can be exercised end to end. The delivery transport checks the runtime mode:
+production accepts only public IPv4 HTTPS destinations on port 443, while non-production
+may accept private IPv4, localhost, `.test` and nonstandard ports. Exact hostname
+allowlisting, DNS pinning, redirect rejection, signatures and response timeouts apply in
+all modes. Local HTTPS still verifies certificates; the exception never disables TLS.
+
 ## Validation
 
 From the interviewer repository: `npm run test:contracts`.

@@ -1512,7 +1512,7 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://"
+          "pattern": "^https?://"
         },
         "event_types": {
           "type": "array",
@@ -1553,7 +1553,7 @@
         "url": {
           "type": "string",
           "format": "uri",
-          "pattern": "^https://"
+          "pattern": "^https?://"
         },
         "status": {
           "const": "pending_verification"

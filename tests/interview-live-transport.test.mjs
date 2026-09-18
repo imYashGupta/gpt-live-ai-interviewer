@@ -122,3 +122,59 @@ test("a stop before session.started prevents a late greeting", async (t) => {
   assert.equal((await observer.next(AbortSignal.timeout(5000))).kind, "execution.closed");
   assert.deepEqual(received.map((event) => event.type), ["session.close"]);
 });
+
+test("trusted clock waits for greeting, deduplicates updates and wraps up once without closing early", async (t) => {
+  const received = [];
+  let acceptGreeting;
+  const observer = await transport(t, (socket) => {
+    send(socket, started);
+    socket.on("message", (data) => {
+      const command = JSON.parse(data.toString());
+      received.push(command);
+      if (command.type === "session.instructions.append" && command.event_id.startsWith("greeting_")) {
+        send(socket, ack("session.instructions.appended", command.event_id));
+      } else if (command.type === "session.commentary.append") {
+        if (command.event_id.startsWith("greeting_")) {
+          acceptGreeting = () => send(socket, ack("session.commentary.appended", command.event_id));
+          send(socket, {type: "session.usage.updated", event_id: "greeting_pending", usage: {seconds: 0}});
+        } else {
+          send(socket, {type: "session.usage.updated", event_id: "closing_cued", usage: {seconds: 0}});
+        }
+      } else if (command.type === "session.instructions.append" && command.event_id.startsWith("wrap_up_")) {
+        send(socket, ack("session.instructions.appended", command.event_id));
+        send(socket, ack("session.instructions.appended", command.event_id));
+      } else if (command.type === "session.close") {
+        send(socket, final);
+      } else {
+        send(socket, {type: "session.usage.updated", event_id: `barrier_${received.length}`, usage: {seconds: 0}});
+      }
+    });
+  });
+  await observer.next(AbortSignal.timeout(5000));
+  observer.updateTimeRemaining(280);
+  assert.equal(received.length, 2, "clock cannot interrupt the opening handshake");
+  acceptGreeting();
+  await observer.next(AbortSignal.timeout(5000));
+  assert.equal(received.at(-1).type, "session.thinking.append");
+  assert.match(received.at(-1).content, /280 seconds remain/);
+  observer.updateTimeRemaining(279);
+  observer.updateTimeRemaining(271);
+  observer.updateTimeRemaining(260);
+  await observer.next(AbortSignal.timeout(5000));
+  assert.equal(received.length, 4, "one internal clock update per 30-second bucket");
+  observer.updateTimeRemaining(20);
+  await observer.next(AbortSignal.timeout(5000));
+  assert.equal(received.at(-2).type, "session.instructions.append");
+  assert.match(received.at(-2).content, /Enter wrap-up now/);
+  assert.equal(received.at(-1).type, "session.commentary.append");
+  observer.updateTimeRemaining(19);
+  observer.updateTimeRemaining(5);
+  observer.stop();
+  observer.updateTimeRemaining(4);
+  assert.equal((await observer.next(AbortSignal.timeout(5000))).kind, "execution.closed");
+  assert.deepEqual(received.map((event) => event.type), [
+    "session.instructions.append", "session.commentary.append", "session.thinking.append",
+    "session.thinking.append", "session.instructions.append", "session.commentary.append", "session.close",
+  ]);
+  assert.throws(() => observer.updateTimeRemaining(NaN), /Invalid remaining/);
+});

@@ -43,6 +43,7 @@ test(
         key = randomBytes(32),
         origin = "https://interviewer.test";
       let events = [],
+        clockUpdates = [],
         creates = 0,
         hangups = 0,
         assessments = 0,
@@ -66,6 +67,7 @@ test(
         attach() {
           return {
             ready: Promise.resolve(),
+            updateTimeRemaining(seconds) { clockUpdates.push(seconds); },
             async next() {
               await onNext();
               if (events.length) return events.shift();
@@ -117,6 +119,7 @@ test(
       async function invite() {
         mode = "normal";
         events = [];
+        clockUpdates = [];
         duringCreate = async () => {};
         onNext = async () => {};
         const ws = await service.createWorkspace(
@@ -392,9 +395,29 @@ test(
               (await service.readInterview(p, x.interview.id)).usage_status,
               "settled"
             );
+            assert.equal((await service.readInterview(p, x.interview.id)).execution_status, "completed");
+            assert.equal((await pool.query("SELECT stop_reason FROM service_attempts WHERE id=$1", [started.attempt_id])).rows[0].stop_reason,
+              reason === "candidate" ? "candidate_end" : "duration_limit");
+            assert.deepEqual(clockUpdates, [], "no pacing commands after stop is requested");
           }
         }
       );
+      await t.test("the worker supplies its clock, then closes automatically at the deadline", async () => {
+        const x = await invite();
+        const started = await startCandidate(service, x.session.token, offer);
+        duringCreate = async () => {
+          await pool.query("UPDATE service_attempts SET deadline_at=now()+interval '19 seconds' WHERE id=$1", [started.attempt_id]);
+          events.push({id: "answer", kind: "transcript.fragment", speaker: "candidate", text: "A short answer.", startMs: 0, endMs: 1000});
+        };
+        onNext = async () => {
+          assert.ok(clockUpdates[0] > 0 && clockUpdates[0] <= 20);
+          await pool.query("UPDATE service_attempts SET deadline_at=now()-interval '1 second' WHERE id=$1", [started.attempt_id]);
+        };
+        await run(x.interview.id);
+        assert.equal(clockUpdates.length, 1);
+        assert.equal((await service.readInterview(p, x.interview.id)).execution_status, "completed");
+        assert.equal((await pool.query("SELECT stop_reason FROM service_attempts WHERE id=$1", [started.attempt_id])).rows[0].stop_reason, "duration_limit");
+      });
       await t.test(
         "employer cancellation requests remote stop before releasing the reservation",
         async () => {

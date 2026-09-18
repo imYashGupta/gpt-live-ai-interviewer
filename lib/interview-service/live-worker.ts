@@ -289,9 +289,21 @@ export async function executeLive(service: InterviewService, job: Job) {
           Date.now() >= current.deadline_at.getTime() ||
           !service.liveEnabled(row.account_id))
       ) {
+        await transaction(service.pool, async (db) => {
+          if (!(await ownsLease(db, job))) throw new Error("Live worker lease lost");
+          await db.query(
+            "UPDATE service_attempts SET stop_requested_at=coalesce(stop_requested_at,now()),stop_reason=coalesce(stop_reason,$2) WHERE id=$1",
+            [attempt.id, current.disabled_at || !service.liveEnabled(row.account_id)
+              ? "service_disabled" : "duration_limit"],
+          );
+        });
         connection.stop();
         stoppingAt = Date.now();
       }
+      if (!stoppingAt)
+        connection.updateTimeRemaining(
+          Math.max(0, Math.ceil((current.deadline_at.getTime() - Date.now()) / 1000))
+        );
       if (stoppingAt && Date.now() - stoppingAt > 10000)
         throw new Error("Provider did not confirm stop");
       const event = await connection.next(AbortSignal.timeout(2000));

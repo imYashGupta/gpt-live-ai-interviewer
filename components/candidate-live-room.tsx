@@ -11,16 +11,17 @@ export type CandidateSession = {
   last_start_at: string;
   transport: "sandbox" | "webrtc";
 };
-async function request(path: string, input?: unknown) {
+async function request(path: string, input?: unknown, signal?: AbortSignal) {
   const response = await fetch(
     path,
     input === undefined
-      ? { cache: "no-store" }
+      ? { cache: "no-store", signal }
       : {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
           keepalive: path.endsWith("/stop"),
+          signal,
         }
   );
   const result = await response.json();
@@ -38,6 +39,7 @@ export default function CandidateLiveRoom({
 }) {
   const [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
+    [ending, setEnding] = useState(false),
     [muted, setMuted] = useState(false);
   const [message, setMessage] = useState(""),
     [connected, setConnected] = useState(false),
@@ -46,6 +48,7 @@ export default function CandidateLiveRoom({
     microphone = useRef<MediaStream | null>(null),
     audio = useRef<HTMLAudioElement | null>(null);
   const submitted = useRef(false),
+    endRequested = useRef(false),
     alive = useRef(true),
     deadline = useRef<number | null>(null);
   function release() {
@@ -114,7 +117,7 @@ export default function CandidateLiveRoom({
         }
       };
       connection.onconnectionstatechange = () => {
-        if (!alive.current) return;
+        if (!alive.current || endRequested.current) return;
         if (connection.connectionState === "connected") {
           setConnected(true);
           setMessage("Interview in progress.");
@@ -185,21 +188,41 @@ export default function CandidateLiveRoom({
     }
   }
   async function stop() {
-    release();
+    if (busy) return;
+    // Keep WebRTC alive until the provider confirms closure. Disable capture immediately.
+    microphone.current?.getAudioTracks().forEach((track) => { track.enabled = false; });
+    audio.current?.pause();
+    endRequested.current = true;
+    setEnding(true);
     setConnected(false);
     setBusy(true);
+    setMessage("Ending your interview…");
     try {
-      await request("/candidate/stop", {});
-      setMessage(
-        "Interview ended. Your transcript will be processed for the recruiter."
-      );
-      submitted.current = false;
+      const signal = AbortSignal.timeout(15000);
+      await request("/candidate/stop", {}, signal);
+      while (alive.current && !signal.aborted) {
+        const state = await request("/candidate/session", undefined, signal);
+        onStatus(state);
+        if (state.execution_status !== "in_progress") {
+          submitted.current = false;
+          setMessage(state.execution_status === "completed"
+            ? "Interview ended. Your transcript will be processed for the recruiter."
+            : "The interview has closed. The recruiter will receive its final status and available transcript.");
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      if (alive.current) throw new Error("End confirmation timed out");
     } catch {
-      setMessage(
+      if (alive.current) setMessage(
         "Could not confirm the end request. Your microphone is off. Please retry ending the interview."
       );
     } finally {
-      setBusy(false);
+      release();
+      if (alive.current) {
+        setBusy(false);
+        setEnding(false);
+      }
     }
   }
   const active = session.execution_status === "in_progress";
@@ -248,10 +271,12 @@ export default function CandidateLiveRoom({
       />
       {active && (
         <>
-          {remaining !== null && (
+          {remaining !== null && !ending && (
             <p>
-              Time remaining: {Math.floor(remaining / 60)}:
-              {String(remaining % 60).padStart(2, "0")}
+              {remaining === 0 ? "Time is up. Ending your interview…" : <>
+                {remaining <= 20 ? "Wrapping up. Time remaining: " : "Time remaining: "}{Math.floor(remaining / 60)}:
+                {String(remaining % 60).padStart(2, "0")}
+              </>}
             </p>
           )}
           {!connected && !busy && (
@@ -263,7 +288,7 @@ export default function CandidateLiveRoom({
           <div className={styles.actions}>
             <button
               className={button}
-              disabled={!connected}
+              disabled={!connected || busy}
               onClick={() => {
                 microphone.current?.getAudioTracks().forEach((t) => {
                   t.enabled = muted;
@@ -292,7 +317,7 @@ export default function CandidateLiveRoom({
         </p>
       )}
       <p className={styles.message} role="status" aria-live="polite">
-        {message}
+        {active || session.execution_status === "ready" ? message : "Interview closed."}
       </p>
     </section>
   );

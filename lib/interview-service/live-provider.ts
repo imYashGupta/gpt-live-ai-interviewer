@@ -11,6 +11,8 @@ export type TranscriptTurn = {
 export interface LiveConnection {
   ready: Promise<void>;
   next(signal: AbortSignal): Promise<Observation | null>;
+  /** Trusted service clock; adapters translate pacing and wrap-up into provider controls. */
+  updateTimeRemaining(seconds: number): void;
   stop(): void;
   close(): void;
 }

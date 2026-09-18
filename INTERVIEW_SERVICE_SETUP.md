@@ -25,7 +25,7 @@ In another terminal:
 npm run service:worker
 ```
 
-The local service origin is `https://localhost:3000`. Keep `INTERVIEW_SERVICE_ORIGIN` equal to the browser's HTTPS origin; candidate POST requests verify it. Secure candidate cookies require HTTPS. Next's HTTPS development command may set up a local certificate; an existing Herd HTTPS reverse proxy is also suitable when configured to forward to Next. Update the origin if using a different host or port.
+The activated Herd pilot uses `https://interview-bot.test:3000`, with the existing `interview-bot.test` certificate and key passed to Next's HTTPS flags. `next.config.ts` explicitly allows that development hostname for HMR. The generic HTTPS command above uses `https://localhost:3000`; set the origin to match whichever address you run. Keep `INTERVIEW_SERVICE_ORIGIN` equal to the browser's HTTPS origin; candidate POST requests verify it. Secure candidate cookies require HTTPS. Next's HTTPS development command may set up a local certificate; an existing Herd HTTPS reverse proxy is also suitable when configured to forward to Next. Update the origin if using a different host or port.
 
 On another installation, copy the service settings from `.env.example`, set `INTERVIEW_DATABASE_URL` to a **dedicated database**, generate a stable 32-byte hex `INTERVIEW_SERVICE_ENCRYPTION_KEY`, then enable `INTERVIEW_SERVICE_ENABLED=true`. Share that key between the API and worker; keep it in a secret manager in deployment. Changing it without re-encrypting rows invalidates encrypted replay responses and webhook secrets.
 
@@ -103,7 +103,7 @@ INTERVIEW_LIVE_ACCOUNT_IDS=acct_internal_pilot
 INTERVIEW_WORKER_CONCURRENCY=4
 ```
 
-Set `OPENAI_API_KEY` server-side. Do not reuse the example account ID; allowlist the explicitly selected internal service account. The code still uses the existing test credential namespace and test account environment for this unbilled integration pilot; full production/test account separation remains a rollout prerequisite. `INTERVIEW_LIVE_ENABLED` defaults to false and no local account has been enabled by this implementation.
+Set `OPENAI_API_KEY` server-side. Do not reuse the example account ID; allowlist the explicitly selected internal service account. The code still uses the existing test credential namespace and test account environment for this unbilled integration pilot; full production/test account separation remains a rollout prerequisite. `INTERVIEW_LIVE_ENABLED` defaults to false. The local Recooty service account is now enabled for the CloudTech internal pilot; other installations remain opt-in.
 
 In Recooty, keep the explicit internal team allowlist. For a live-pilot account set `INTERVIEW_SERVICE_SANDBOX=false` so its screen and optional invitation accurately describe an actual interview, rather than synthetic data. Keep `INTERVIEW_SERVICE_ALLOW_INVITATIONS=false` until an internal delivery test is authorized. This flag change does not enable customer billing. Recooty discovers `pilot_default` / `pilot_v1` through the unchanged capabilities API; no vendor-specific ATS code is needed. Refresh after the one-minute capability cache expires.
 
@@ -126,3 +126,21 @@ The live implementation adds a real SDK/local WebSocket transport test and Postg
 Before inviting real candidates, run a bounded real-provider acceptance test covering audio startup, sideband readiness, control restrictions, silent/muted time, candidate/remote stop, browser closure, worker interruption and final usage. Verify result delivery through a controlled public HTTPS webhook receiver and authenticated polling in Recooty. This validates behavior that mocked sessions cannot prove.
 
 Still pending: reviewed plans, reconciliation listing, rescheduling, private artifacts, deletion/retention, webhook ownership challenges/producer secret rotation, production/test environment separation, production rate limits, provider cost calibration and paid allowance enforcement. The Phase 2/3 production exit gates remain open until those prerequisites and the real-provider pilot are verified. The MVP's original SQLite/passcode workflow is unchanged.
+
+## Local CloudTech activation — 2026-09-18
+
+Recooty's additive AI interview migration is applied to the existing Herd `local_recooty` database. Its ignored local configuration enables only CloudTech (team 1), uses the existing private service credential and trusted HTTPS origin above, and keeps invitation emails disabled. Its live screen has `INTERVIEW_SERVICE_SANDBOX=false`; customer usage still settles at zero charge.
+
+The local ATS worker uses the dedicated `{ai-interview-pilot}` queue on connection `ai`, so it does not consume unrelated jobs:
+
+```sh
+php artisan queue:work ai --queue='{ai-interview-pilot}' --sleep=1 --timeout=160 --tries=1 --no-interaction
+```
+
+The interview API and separate service worker must also be running. These development processes are not an installed supervisor. Local webhook delivery remains blocked by the public-destination policy; use **Sync status** in Recooty for the pilot, or run its existing `interviews:reconcile` command. The full application scheduler was not started.
+
+An internal pilot application exists under CloudTech's Social Media Intern role with a two-minute interview. Its link was created through the actual queued ATS integration. Browser testing confirmed that Continue opens the audio consent screen without microphone activation. The initial local failures were a blocked Next development origin (preventing reliable hydration) and `crypto.randomUUID()` being unavailable on Recooty's HTTP development origin; the ATS now generates UUIDs using Web Crypto random bytes when necessary and displays a selectable link when clipboard access is unavailable. Signed-in browser verification covered create, replace and manual copying on Recooty's HTTP origin. Refresh existing browser tabs after installing these fixes and reopen the complete invitation link if its fragment was lost during an earlier reload.
+
+The integrated provider must explicitly initiate the opening. Its server sideband now follows the [GPT-Live greeting sequence](https://developers.openai.com/api/docs/guides/live-conversations#greet-before-the-caller-speaks): append English greeting instructions after `session.started`, match the acknowledgment, then send one begin commentary command. Each startup/acknowledgment wait is bounded to ten seconds. The WebRTC answer is released independently so microphone media can start; candidate-side provider commands remain disabled. Restart the separate service worker after adapter changes.
+
+A real-provider check using synthetic silence verified the AI welcome/first question, nonzero incoming audio, browser playback, trusted transcript capture and final usage (69 seconds, zero customer charge). Recooty recovered the insufficient-evidence report and settled usage through **Sync status**. No physical microphone was captured and no candidate answer or substantive assessment was tested. The run ended as interrupted because browser media closed before remote stop completed; graceful stop ordering remains a follow-up. A two-way spoken interview, substantive assessment and controlled public webhook delivery remain acceptance gates.

@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { randomUUID } from "node:crypto";
 import { SidebandWS } from "openai/resources/live/sideband/ws";
 import type { LiveProvider, LiveConnection } from "../live-provider.ts";
 import type { Observation } from "../provider.ts";
@@ -66,25 +67,76 @@ export class OpenAILiveProvider implements LiveProvider {
       ended = false,
       failed = false;
     let wake: (() => void) | undefined;
+    const instructionsId = `greeting_instructions_${randomUUID()}`;
+    const commentaryId = `greeting_begin_${randomUUID()}`;
+    let greeting: "waiting" | "instructions" | "commentary" | "done" = "waiting";
+    let greetingTimer: ReturnType<typeof setTimeout> | undefined;
+    const finishGreeting = () => {
+      greeting = "done";
+      clearTimeout(greetingTimer);
+    };
     let readyResolve!: () => void, readyReject!: (error: Error) => void;
     const ready = new Promise<void>((resolve, reject) => {
       readyResolve = resolve;
       readyReject = reject;
     });
     const fail = () => {
+      finishGreeting();
       failed = true;
       readyReject(new Error("Live observer unavailable"));
       wake?.();
     };
     socket.on("error", fail);
     socket.on("close", () => {
+      finishGreeting();
       ended = true;
       readyReject(new Error("Live observer closed"));
       wake?.();
     });
-    socket.socket.on("open", readyResolve);
+    const awaitGreetingAck = () => {
+      clearTimeout(greetingTimer);
+      greetingTimer = setTimeout(fail, 10000);
+      greetingTimer.unref();
+    };
+    socket.socket.on("open", () => {
+      // Release the SDP independently: the greeting needs an active WebRTC audio track.
+      readyResolve();
+      if (greeting !== "done") awaitGreetingAck();
+    });
     socket.on("event", (event) => {
       try {
+        // Server-owned startup; the candidate data channel cannot issue provider commands.
+        if (event.type === "session.started" && greeting === "waiting") {
+          greeting = "instructions";
+          awaitGreetingAck();
+          socket.send({
+            type: "session.instructions.append",
+            event_id: instructionsId,
+            delegation_id: null,
+            content:
+              "Keep all existing interview instructions. Begin immediately in English without waiting for the candidate to speak: briefly welcome them and introduce yourself as their AI interviewer, then ask them to introduce themselves in relation to the role. Pause and listen for their answer.",
+          });
+        } else if (
+          event.type === "session.instructions.appended" &&
+          event.client_event_id === instructionsId &&
+          greeting === "instructions"
+        ) {
+          greeting = "commentary";
+          awaitGreetingAck();
+          socket.send({
+            type: "session.commentary.append",
+            event_id: commentaryId,
+            delegation_id: null,
+            content: "Begin the interview now, following the instructions provided.",
+          });
+        } else if (
+          event.type === "session.commentary.appended" &&
+          event.client_event_id === commentaryId &&
+          greeting === "commentary"
+        ) {
+          finishGreeting();
+        }
+        if (event.type === "session.closed") finishGreeting();
         const normalized = normalizeOpenAILiveEvent(event);
         if (!normalized) return; // Never queue reflected raw audio or provider-only metadata.
         bytes += JSON.stringify(normalized).length;
@@ -123,9 +175,11 @@ export class OpenAILiveProvider implements LiveProvider {
         return event ?? null;
       },
       stop() {
+        finishGreeting();
         socket.send({ type: "session.close" });
       },
       close() {
+        finishGreeting();
         socket.close();
       },
     };

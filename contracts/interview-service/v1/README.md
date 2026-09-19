@@ -132,3 +132,12 @@ From the interviewer repository: `npm run test:contracts`.
 From Recooty: `vendor/bin/phpunit tests/Unit/InterviewServiceClientTest.php`.
 All tests use local fixtures/fakes; they do not send invitations, call paid providers,
 contact a database, or change an existing customer subscription.
+
+
+### Local deletion implementation
+
+`DELETE /v1/interviews/{id}` requires tenant write authorization and an idempotency key. Its 202 response acknowledges acceptance; poll `GET /v1/interviews/{id}/deletion` with tenant read authorization for completion. Normal interview/result access returns `410 interview_deleted` after acceptance. Deletion retries cannot issue another invitation or recreate the same external reference.
+
+`DeletionStatus.status=deleted` confirms local service data erasure and known execution termination. It does not confirm deletion at the provider, in backups, delivered email or downloaded copies. Unknown provider creation remains pending with an explicit blocker. There is no automatic retention period or scheduler.
+
+The `interview.deleted` event contains opaque service identities; its `external_reference` is replaced by the service interview ID after erasure. Consumers must resolve it by authenticated account/workspace and service interview ID, tombstone their copies, and ignore delayed events. The authorized status endpoint recovers lost deletion callbacks. Minimal numeric settlement and deduplication metadata remains; deleted interviews are excluded from normal usage pages. Caller references and idempotency keys must be opaque, never personal data.

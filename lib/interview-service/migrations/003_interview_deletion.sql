@@ -1,0 +1,11 @@
+ALTER TABLE service_interviews ADD COLUMN deletion_requested_at timestamptz;
+ALTER TABLE service_interviews ADD COLUMN deleted_at timestamptz;
+ALTER TABLE service_interviews ADD COLUMN deletion_blocker text;
+ALTER TABLE service_interviews ADD COLUMN external_reference_hash text;
+CREATE UNIQUE INDEX service_interviews_reference_hash ON service_interviews(workspace_id, external_reference_hash);
+ALTER TABLE service_commands ADD COLUMN interview_id text REFERENCES service_interviews(id);
+ALTER TABLE service_commands ADD COLUMN erased_at timestamptz;
+ALTER TABLE service_jobs DROP CONSTRAINT service_jobs_kind_check;
+ALTER TABLE service_jobs ADD CONSTRAINT service_jobs_kind_check CHECK (kind IN ('execute','assess','deliver','delete'));
+ALTER TABLE service_attempts ADD COLUMN deletion_measured_audio_ms bigint;
+ALTER TABLE service_attempts ADD COLUMN deletion_usage_final boolean;

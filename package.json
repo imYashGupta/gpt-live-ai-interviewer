@@ -12,7 +12,7 @@
     "service:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs migrate",
     "service:provision": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs provision",
     "service:worker": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs worker",
-    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs"
+    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs tests/interview-deletion-database.test.mjs"
   },
   "dependencies": {
     "ajv": "^8.20.0",

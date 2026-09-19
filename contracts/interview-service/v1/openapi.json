@@ -815,6 +815,45 @@
           }
         }
       }
+    },
+    "/v1/interviews/{id}/deletion": {
+      "get": {
+        "operationId": "getInterviewDeletion",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas.json#/$defs/Error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas.json#/$defs/DeletionStatus"
+                }
+              }
+            }
+          }
+        },
+        "description": "Authenticated deletion progress. Deleted confirms local service data erasure and known execution termination only; provider retention and backups are outside this acknowledgment."
+      }
     }
   },
   "components": {

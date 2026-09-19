@@ -23,7 +23,7 @@ export async function transaction<T>(pool: Pool, work: (db: PoolClient) => Promi
 
 /** Explicit operator command; never migrate as a side effect of serving a request. */
 export async function migrateService(pool: Pool): Promise<void> {
-  for (const [version, file] of [[1, "001_foundations.sql"], [2, "002_live_execution.sql"]] as const) {
+  for (const [version, file] of [[1, "001_foundations.sql"], [2, "002_live_execution.sql"], [3, "003_interview_deletion.sql"]] as const) {
     const sql = await readFile(new URL(`./migrations/${file}`, import.meta.url), "utf8");
     const hash = createHash("sha256").update(sql).digest("hex");
     await transaction(pool, async (db) => {

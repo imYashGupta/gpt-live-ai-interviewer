@@ -1,3 +1,4 @@
+import { deleteInterviewData } from "./deletion.ts";
 import { transaction } from "./postgres.ts";
 import { newId, unseal } from "./security.ts";
 import { emitEvent, recordShadowUsage, type InterviewRow, type InterviewService } from "./service.ts";
@@ -54,7 +55,7 @@ async function assess(service: InterviewService,job: Job) {
     if (!await ownsLease(db,job)) return;
     const row = (await db.query<InterviewRow>("SELECT * FROM service_interviews WHERE id=$1 FOR UPDATE",[job.interview_id])).rows[0];
     const attempt = (await db.query("SELECT * FROM service_attempts WHERE id=$1",[row.attempt_id])).rows[0];
-    if (attempt.result || row.execution_status === "cancelled") { await finishJob(db,job); return; }
+    if (row.deletion_requested_at || attempt.result || row.execution_status === "cancelled") { await finishJob(db,job); return; }
     const result = { schema_version:"1.0",interview_id:row.id,workspace_id:row.workspace_id,attempt_id:row.attempt_id,revision:1,
       status:"insufficient_evidence",rubric_version_id:row.request.configuration.rubric_version_id,
       summary:"Synthetic sandbox interview. No candidate assessment was performed.",score_scale:{min:0,max:100},overall_score:null,
@@ -69,7 +70,7 @@ async function assess(service: InterviewService,job: Job) {
 async function deliver(service: InterviewService,job: Job,transport: WebhookTransport) {
   const record = (await service.pool.query(`SELECT e.body,e.id,w.url,w.secret_ciphertext,w.status FROM service_events e
     JOIN service_webhook_endpoints w ON w.id=$2 AND w.account_id=e.account_id WHERE e.id=$1`,[job.event_id,job.endpoint_id])).rows[0];
-  if (!record) throw new Error("Missing delivery");
+  if (!record) return;
   const valid = await transaction(service.pool,db => ownsLease(db,job));
   if (!valid) return;
   if (record.status === "active") {
@@ -81,7 +82,8 @@ async function deliver(service: InterviewService,job: Job,transport: WebhookTran
 /** Lease fencing prevents a recovered worker from committing stale execution/assessment work. */
 export async function runClaimedJob(service: InterviewService,job: Job,transport: WebhookTransport) {
   try {
-    if (job.kind === "execute") await execute(service,job);
+    if (job.kind === "delete") await deleteInterviewData(service,job);
+    else if (job.kind === "execute") await execute(service,job);
     else if (job.kind === "assess") await assess(service,job);
     else if (job.kind === "deliver") await deliver(service,job,transport);
     else throw new Error("Unknown job");
@@ -96,7 +98,7 @@ export async function runClaimedJob(service: InterviewService,job: Job,transport
       return;
     }
     // Persist only an operational code: exceptions can contain PII, keys or destination URLs.
-    await service.pool.query(`UPDATE service_jobs SET status=CASE WHEN attempts>=6 THEN 'dead' ELSE 'pending' END,
+    await service.pool.query(`UPDATE service_jobs SET status=CASE WHEN attempts>=6 AND kind<>'delete' THEN 'dead' ELSE 'pending' END,
       available_at=now()+($3*interval '1 second'),lease_token=NULL,lease_until=NULL,last_error='job_failed'
       WHERE id=$1 AND lease_token=$2 AND lease_until>now()`,[job.id,job.lease_token,Math.min(300,2**job.attempts)+Math.floor(Math.random()*3)]);
   }

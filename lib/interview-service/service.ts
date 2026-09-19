@@ -4,6 +4,7 @@ import { transaction } from "./postgres.ts";
 import { authenticate, assertId, hashToken, newId, newToken, requireScope, seal, ServiceError, unseal, workspace, type Principal } from "./security.ts";
 import { validate, type InterviewRequest } from "./validation.ts";
 import { validateInterviewSemantics } from "./contract-rules.ts";
+import { requestDeletion, deletionStatus } from "./deletion.ts";
 import { webhookUrl } from "./delivery.ts";
 
 export const capabilities = {
@@ -14,6 +15,7 @@ export const capabilities = {
 export interface InterviewRow {
   id: string; account_id: string; workspace_id: string; external_reference: string;
   execution_provider: string; request: InterviewRequest; resource_version: number; execution_status: string;
+  deletion_requested_at: Date | null; deleted_at: Date | null; deletion_blocker: string | null;
   assessment_status: string; usage_status: string; attempt_id: string | null; updated_at: Date;
 }
 export function interviewView(row: InterviewRow) {
@@ -21,6 +23,7 @@ export function interviewView(row: InterviewRow) {
   return { id, workspace_id, external_reference, resource_version, execution_status, assessment_status, usage_status, attempt_id, updated_at: row.updated_at.toISOString() };
 }
 export async function emitEvent(db: PoolClient, row: InterviewRow, type: string, data?: unknown) {
+  if (row.deletion_requested_at && type !== "interview.deleted") return;
   const id = newId("evt");
   const event = { id, type, schema_version: "1.0", occurred_at: new Date().toISOString(), account_id: row.account_id,
     workspace_id: row.workspace_id, subject: `interview/${row.id}`, resource_version: row.resource_version,
@@ -41,7 +44,7 @@ export async function recordShadowUsage(db: PoolClient,row: InterviewRow,attempt
   // Serialize per-workspace insert/commit order so a usage cursor cannot skip an earlier uncommitted settlement.
   await db.query("SELECT id FROM service_workspaces WHERE id=$1 FOR UPDATE",[row.workspace_id]);
   const settlement = { record_type:"settlement", settlement_id:newId("set"),interview_id:row.id,attempt_id:attemptId,
-    workspace_id:row.workspace_id,external_reference:row.external_reference,external_reservation_id:row.request.authorization_budget.external_reservation_id,
+    workspace_id:row.workspace_id,external_reference:row.deletion_requested_at ? row.id : row.external_reference,external_reservation_id:row.deletion_requested_at ? row.id : row.request.authorization_budget.external_reservation_id,
     metric:"interview_seconds",measured_quantity:measured,billable_quantity:0,credit_quantity:"0.000000",rate_card_version:row.execution_provider === "fake" ? "sandbox_zero_v1" : "pilot_zero_v1",settled_at:new Date().toISOString() };
   validate("Settlement",settlement);
   await db.query("INSERT INTO service_usage(id,workspace_id,attempt_id,measured_seconds,record) VALUES ($1,$2,$3,$4,$5)",[settlement.settlement_id,row.workspace_id,attemptId,measured,settlement]);
@@ -83,15 +86,22 @@ export class InterviewService {
       if (previous.rowCount) {
         const row = previous.rows[0];
         if (p.workspaceId && row.workspace_id !== p.workspaceId) throw new ServiceError(404,"not_found");
+        if (row.erased_at) throw new ServiceError(410,"interview_deleted");
+        if (row.interview_id && !operation.startsWith("interview.delete:")) await this.getInterview(db,p,row.interview_id,true);
         if (row.request_hash !== digest) throw new ServiceError(409,"idempotency_conflict");
         return JSON.parse(unseal(row.response_ciphertext,this.key)) as T;
       }
       const result = await work(db);
       await db.query(`INSERT INTO service_commands(account_id,credential_id,workspace_id,operation,command_key,request_hash,response_ciphertext,response_status)
         VALUES ($1,$2,$3,$4,$5,$6,$7,200)`, [p.accountId,p.credentialId,workspaceId,operation,key,digest,seal(JSON.stringify(result),this.key)]);
+      const resource = result as { id?: string; interview_id?: string };
+      const interviewId = operation === "interview.create" ? resource.id : operation.startsWith("interview.") ? operation.split(":")[1] : null;
+      if (interviewId) await db.query("UPDATE service_commands SET interview_id=$4 WHERE account_id=$1 AND operation=$2 AND command_key=$3",[p.accountId,operation,key,interviewId]);
       return result;
     });
   }
+  async deleteInterview(p: Principal, id: string, key: string | null) { return requestDeletion(this,p,id,key); }
+  async deletionStatus(p: Principal, id: string) { return deletionStatus(this,p,id); }
   async createWorkspace(p: Principal, input: {external_reference: string; display_name: string}, key: string | null) {
     requireScope(p,"workspaces:write");
     if (p.workspaceId) throw new ServiceError(403,"forbidden");
@@ -109,23 +119,26 @@ export class InterviewService {
       return { id: row.id, external_reference: row.external_reference, display_name: row.display_name, created_at: row.created_at.toISOString() };
     });
   }
-  async getInterview(db: Pool | PoolClient, p: Principal, id: string, lock = false): Promise<InterviewRow> {
+  async getInterview(db: Pool | PoolClient, p: Principal, id: string, lock = false, includeDeleted = false): Promise<InterviewRow> {
     assertId(id);
     const result = await db.query<InterviewRow>(`SELECT * FROM service_interviews WHERE id=$1 AND account_id=$2
       AND ($3::text IS NULL OR workspace_id=$3) ${lock ? "FOR UPDATE" : ""}`, [id,p.accountId,p.workspaceId]);
     if (!result.rowCount) throw new ServiceError(404,"not_found");
+    if (result.rows[0].deletion_requested_at && !includeDeleted) throw new ServiceError(410,"interview_deleted");
     return result.rows[0];
   }
   async createInterview(p: Principal, input: InterviewRequest, key: string | null) {
     requireScope(p,"interviews:write"); validate("CreateInterviewRequest",input);
     try { validateInterviewSemantics(input); } catch { throw new ServiceError(422,"validation_failed","Invalid availability or authorization budget"); }
     return this.command(p,"interview.create",key,input,input.workspace_id,async db => {
+      const tombstone = await db.query("SELECT id FROM service_interviews WHERE workspace_id=$1 AND external_reference_hash=$2 AND deletion_requested_at IS NOT NULL",[input.workspace_id,hashToken(input.external_reference)]);
+      if (tombstone.rowCount) throw new ServiceError(410,"interview_deleted");
       const c = input.configuration;
       const caps = this.capabilities(p.accountId);
       if (c.mode !== "adaptive" || c.language !== "en" || !caps.interviewer_profile_ids.includes(c.interviewer_profile_id) || !caps.rubric_version_ids.includes(c.rubric_version_id)) throw new ServiceError(422,"unsupported_configuration");
       if (Date.parse(input.availability.last_start_at) <= Date.now()) throw new ServiceError(422,"validation_failed","Start window has expired");
-      const result = await db.query<InterviewRow>(`INSERT INTO service_interviews(id,account_id,workspace_id,external_reference,request,execution_provider)
-        VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (workspace_id,external_reference) DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input,this.liveEnabled(p.accountId) ? "openai_live" : "fake"]);
+      const result = await db.query<InterviewRow>(`INSERT INTO service_interviews(id,account_id,workspace_id,external_reference,request,execution_provider,external_reference_hash)
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input,this.liveEnabled(p.accountId) ? "openai_live" : "fake",hashToken(input.external_reference)]);
       if (!result.rowCount) throw new ServiceError(409,"external_reference_conflict");
       return interviewView(result.rows[0]);
     });
@@ -180,14 +193,14 @@ export class InterviewService {
   }
   async readResult(p: Principal,id: string) {
     requireScope(p,"interviews:read"); const row = await this.getInterview(this.pool,p,id);
-    const result = await this.pool.query("SELECT result FROM service_attempts WHERE id=$1",[row.attempt_id]);
+    const result = await this.pool.query("SELECT a.result FROM service_attempts a JOIN service_interviews i ON i.id=a.interview_id WHERE a.id=$1 AND i.deletion_requested_at IS NULL",[row.attempt_id]);
     if (!result.rows[0]?.result) throw new ServiceError(409,row.assessment_status === "failed" ? "result_failed" : "result_pending");
     return result.rows[0].result;
   }
   async usage(p: Principal, workspaceId: string, cursor: string | null) {
     requireScope(p,"usage:read"); await workspace(this.pool,p,workspaceId);
     if (cursor && !/^[0-9]{1,18}$/.test(cursor)) throw new ServiceError(422,"validation_failed");
-    const rows = (await this.pool.query("SELECT sequence,record FROM service_usage WHERE workspace_id=$1 AND sequence>$2 ORDER BY sequence LIMIT 101",[workspaceId,cursor ?? "0"])).rows;
+    const rows = (await this.pool.query("SELECT u.sequence,u.record FROM service_usage u JOIN service_attempts a ON a.id=u.attempt_id JOIN service_interviews i ON i.id=a.interview_id WHERE u.workspace_id=$1 AND u.sequence>$2 AND i.deletion_requested_at IS NULL ORDER BY u.sequence LIMIT 101",[workspaceId,cursor ?? "0"])).rows;
     return { data: rows.slice(0,100).map(r => r.record), next_cursor: rows.length > 100 ? String(rows[99].sequence) : null };
   }
   async balance(p: Principal, workspaceId: string) {

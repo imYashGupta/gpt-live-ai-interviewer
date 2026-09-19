@@ -1698,6 +1698,39 @@
         "data"
       ],
       "additionalProperties": false
+    },
+    "DeletionStatus": {
+      "type": "object",
+      "properties": {
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "status": {
+          "enum": [
+            "deletion_pending",
+            "deleted"
+          ]
+        },
+        "blocker": {
+          "enum": [
+            "execution_stopping",
+            "provider_outcome_unknown",
+            "provider_unavailable",
+            "provider_stop_failed"
+          ]
+        }
+      },
+      "required": [
+        "interview_id",
+        "workspace_id",
+        "status"
+      ],
+      "additionalProperties": false
     }
   }
 }

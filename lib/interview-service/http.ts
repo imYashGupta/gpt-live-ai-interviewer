@@ -66,9 +66,11 @@ export async function handleApi(request: Request,service: InterviewService) {
     if (method === "POST" && path === "/v1/webhook-endpoints") return json(await service.webhookEndpoint(p,await body(request) as Parameters<InterviewService["webhookEndpoint"]>[1],key),201);
     if (method === "GET" && path === "/v1/usage") return json(await service.usage(p,url.searchParams.get("workspace_id") ?? "",url.searchParams.get("cursor")));
     if (method === "GET" && path === "/v1/balance") return json(await service.balance(p,url.searchParams.get("workspace_id") ?? ""));
-    const match = /^\/v1\/interviews\/([A-Za-z0-9_-]+)(?:\/(access-links|cancel|result))?$/.exec(path);
+    const match = /^\/v1\/interviews\/([A-Za-z0-9_-]+)(?:\/(access-links|cancel|result|deletion))?$/.exec(path);
     if (match) {
       const [,id,action]=match;
+      if (method === "DELETE" && !action) return json(await service.deleteInterview(p,id,key),202);
+      if (method === "GET" && action === "deletion") return json(await service.deletionStatus(p,id));
       if (method === "GET" && !action) return json(await service.readInterview(p,id));
       if (method === "GET" && action === "result") return json(await service.readResult(p,id));
       if (method === "POST" && action === "access-links") return json(await service.accessLink(p,id,await body(request) as {expires_at:string},key),201);

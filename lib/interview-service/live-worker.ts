@@ -34,6 +34,8 @@ async function checkpoint(
 ) {
   await transaction(service.pool, async (db) => {
     if (!(await ownsLease(db, job))) throw new Error("Live worker lease lost");
+    const deleting = (await db.query("SELECT deletion_requested_at FROM service_interviews WHERE id=$1",[job.interview_id])).rows[0]?.deletion_requested_at;
+    if (deleting && event.kind === "transcript.fragment") return;
     const attempt = (
       await db.query(
         "SELECT * FROM service_attempts WHERE interview_id=$1 FOR UPDATE",
@@ -75,7 +77,7 @@ async function checkpoint(
       (event.kind === "transcript.fragment" ? event.text.length : 0);
     if (count >= 20000 || characters > 150000)
       throw new Error("Capture limit exceeded");
-    await db.query(
+    if (!deleting) await db.query(
       "INSERT INTO service_observations(attempt_id,event_id,observation) VALUES ($1,$2,$3)",
       [attempt.id, event.id, event]
     );
@@ -117,7 +119,7 @@ async function finalize(
         [attempt.id]
       )
     ).rows.map((r) => r.observation as Observation);
-    const transcript = normalizeTranscript(events);
+    const transcript = row.deletion_requested_at ? [] : normalizeTranscript(events);
     const final = state.usageStatus === "final";
     const outcome =
       row.execution_status === "cancelled"
@@ -201,6 +203,7 @@ export async function executeLive(service: InterviewService, job: Job) {
       ).rows[0];
       if (
         account.disabled_at ||
+        row.deletion_requested_at ||
         attempt.stop_requested_at ||
         Date.now() >= attempt.deadline_at.getTime() ||
         !service.liveEnabled(row.account_id)
@@ -216,6 +219,8 @@ export async function executeLive(service: InterviewService, job: Job) {
       }
       await transaction(service.pool, async (db) => {
         if (!(await ownsLease(db, job))) throw new Error("Lease lost");
+        const fresh = (await db.query("SELECT deletion_requested_at FROM service_interviews WHERE id=$1",[row.id])).rows[0];
+        if (fresh.deletion_requested_at) throw new Error("Deletion requested");
         await db.query(
           "UPDATE service_attempts SET connection_state='creating' WHERE id=$1",
           [attempt.id]
@@ -230,7 +235,7 @@ export async function executeLive(service: InterviewService, job: Job) {
         await transaction(service.pool, async (db) => {
           if (!(await ownsLease(db, job))) throw new Error("Lease lost");
           await db.query(
-            "UPDATE service_attempts SET provider_reference=$2,answer_ciphertext=$3,connection_state='created',offer_ciphertext=NULL WHERE id=$1",
+            "UPDATE service_attempts SET provider_reference=$2,answer_ciphertext=CASE WHEN EXISTS (SELECT 1 FROM service_interviews WHERE id=service_attempts.interview_id AND deletion_requested_at IS NOT NULL) THEN NULL ELSE $3 END,connection_state='created',offer_ciphertext=NULL WHERE id=$1",
             [attempt.id, created.reference, seal(created.answer, service.key)]
           );
         });
@@ -325,7 +330,8 @@ export async function executeLive(service: InterviewService, job: Job) {
     ).rows[0];
     if (["created", "observing"].includes(latest.connection_state))
       await provider.hangup(latest.provider_reference);
-    await finalize(service, job, true);
+    if (latest.connection_state === "queued") await checkpoint(service,job,{id:"never_started",kind:"execution.closed",cumulativeAudioMs:0,outcome:"interrupted"});
+    await finalize(service, job, latest.connection_state !== "queued");
   } finally {
     connection?.close();
   }
@@ -450,7 +456,7 @@ export async function assessLive(service: InterviewService, job: Job) {
         [row.id]
       )
     ).rows[0];
-    if (locked.execution_status === "cancelled") {
+    if (locked.deletion_requested_at || locked.execution_status === "cancelled") {
       await finishJob(db, job);
       return;
     }

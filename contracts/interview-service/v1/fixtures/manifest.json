@@ -21,5 +21,6 @@
   "webhook-endpoint.json": "WebhookEndpoint",
   "interview-update.json": "UpdateInterviewRequest",
   "usage-adjusted.json": "Event",
-  "lifecycle-event.json": "Event"
+  "lifecycle-event.json": "Event",
+  "deletion-status.json": "DeletionStatus"
 }

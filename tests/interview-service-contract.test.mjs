@@ -122,3 +122,10 @@ test('contract snapshot has an explicit version and matching content hashes', ()
     assert.equal(createHash('sha256').update(readFileSync(new URL(file, root))).digest('hex'), hash, file);
   }
 });
+
+test('deletion status distinguishes local completion from unresolved provider termination', () => {
+  const base = fixture('deletion-status');
+  assert.equal(validate('DeletionStatus', base).valid, true);
+  assert.equal(validate('DeletionStatus', {...base,status:'deletion_pending',blocker:'provider_outcome_unknown'}).valid, true);
+  assert.equal(validate('DeletionStatus', {...base,status:'provider_purged'}).valid, false);
+});

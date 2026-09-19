@@ -2,16 +2,27 @@
 
 Updated 2026-09-19. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resume checkpoint, then this file and the applicable AGENTS.md files and the latest sections (14–17) of AI_INTERVIEW_INTEGRATION_PLAN.md. Earlier progress entries in that plan are historical; several gates described as pending there have since been tested.
 
+## Durable deletion slice — completed locally
+
+Recooty commit: `e06dd0e2f`. Service implementation and these checkpoints are grouped under `feat(interview-service): add durable interview deletion`; resolve its final hash from git log. Both branches remain `codex/ai-interview-integration`.
+
+- Implemented service DELETE acceptance, authenticated deletion-status polling, immediate token/content revocation, retryable cleanup, active-session stopping and explicit unknown-provider blockers. Deleted interviews cannot be recreated by stale commands; late evidence, assessments and deliveries are fenced.
+- Recooty erases its encrypted request/report/link and inbox copies, keeps minimal numeric audit, retries a stable remote deletion command, and detaches the application after service confirmation. Signed deletion events resolve by service identity; authenticated polling recovers missed callbacks. Tenant-authorized deletion still works with the pilot disabled.
+- Existing recruiter application deletion and job-driven application cleanup use the same transaction and lock against new AI interview creation. Unresolved ATS creation is a deliberate 409 prerequisite: reconcile the remote mapping first. Team hard deletion remains restricted by tenant/accounting mappings.
+- Automatic retention is disabled. No period is selected. Local completion is not evidence that provider persistence, backups, sent mail, browser downloads or unrelated legacy MVP archives were purged. Unknown provider creation remains pending. See plan section 18 for the full inventory and limits.
+- Service tests: 33 database tests using disposable Herd schemas, 59 unit/contract/transport tests, lint and TypeScript passed. ATS: 44 focused tests / 315 assertions plus the existing nested application/human-interview deletion test / 9 assertions (45 tests / 324 assertions total). No frontend changes/build.
+- Applied service migration 003 and ATS migration `2026_09_19_170401_add_deletion_state_to_ai_interviews.php` only to local Herd databases. Existing pilot/customer interviews were not deleted. All destructive tests used disposable synthetic fixtures and mocked providers.
+- Restored Next HTTPS after the earlier processes exited outside this task. Latest observed PIDs: 22633/22634, exec session 73305. Capabilities returned 200, unknown deletion status 404, and there were no active/provisional live attempts. Service worker, dedicated ATS worker and scheduler are stopped; start only when needed after reinspection.
+- API entry points: `DELETE /v1/interviews/{id}` with `Idempotency-Key`; `GET /v1/interviews/{id}/deletion`; existing authorized ATS action route with `action=delete` and a UUID `request_key`. This slice does not add a new recruiter delete button. An ATS request cannot revoke remote access during a service outage until the service receives the durable command; report that state as pending.
+
 ## Recommended next task
 
-The **local Phase 3 report-delivery and recovery slice is complete**. See sections 16–17 of AI_INTERVIEW_INTEGRATION_PLAN.md. Real signed HTTP delivery and retry after a bounded local receiver outage passed against Recooty. Public production delivery and the deployed outage gate remain open. Do not enable paid billing yet.
+1. Decide lifecycle policy and prepare backup/restore acceptance that preserves tombstones. Unknown provider creation/usage needs evidence-based reconciliation; no silent completion or automatic reservation release. Design deletion of unresolved ATS creates and team/account shutdown separately.
+2. Production webhook acceptance still needs an approved public HTTPS receiver, deployed outage testing, ownership verification and signing-key rotation. Preserve exact-host allowlisting and public IPv4 HTTPS on port 443. Paid billing stays disabled.
+3. Use existing Herd databases, synthetic disposable fixtures and mocks. Reinspect matching processes and pending/active work before starting dedicated workers. Do not replay the existing unmapped manual settlement against an arbitrary application.
+4. Continue checkpointing milestones and group related local commits. No push, deployment, paid sessions, invitations or production configuration changes were made in this slice.
 
-1. When an approved public HTTPS receiver is available, repeat signed delivery and deployed outage acceptance in production mode, then implement ownership verification and signing-key rotation. Exact-host allowlisting and the public IPv4 HTTPS/443 policy remain required.
-2. The candidate presentation slice is now implemented and verified (see below). If staging remains unavailable, the next independent slice is lifecycle/privacy/retention prerequisites before production or paid allowances.
-3. Keep using existing synthetic results and existing Herd PostgreSQL. Do not create paid sessions solely to re-prove report delivery; do not send invitations, push, deploy or enable charging without a new request.
-4. Keep the canonical checkpoint current and commit related changes at meaningful boundaries on the existing branches.
-
-The preferred original MVP presentation has been restored to the integrated candidate flow. Its browser-authoritative provider controls, reports, costs and debug UI were not copied. The current candidate API has no live-caption projection; the sidebar provides preparation/privacy guidance instead.
+The candidate presentation slice remains complete. Candidate live captions are unavailable; do not restore browser-authoritative provider controls.
 
 ## Candidate presentation slice — completed locally
 
@@ -180,7 +191,7 @@ Playwright CLI skill/wrapper was used with session `pilot-debug` from `/tmp`. Se
 - Seamless reconnect/provider replay is not implemented. Reload cannot restore a live media attempt; recovery stops uncertain sessions rather than duplicating them.
 - Provider sessions may cost money even though customer charge is zero. Use mocks for routine tests and bounded internal live checks only when needed.
 - Public webhook verification, ownership challenge and producer secret rotation are unfinished. Local private-address delivery is allowed only outside production and only for exact allowlisted hosts; production remains public HTTPS-only.
-- Reviewed plans, rescheduling/listing gaps, private artifacts, retention/deletion, environment separation, rate limits, provider cost calibration and paid allowance enforcement remain in the broader plan.
+- Reviewed plans, rescheduling/listing gaps, private artifacts, retention policy/restore acceptance, environment separation, rate limits, provider cost calibration and paid allowance enforcement remain in the broader plan.
 - Do not promise full production readiness, automatically alter hiring outcomes, silently relabel historical interrupted attempts, or expose candidate data in logs/handoff documents.
 
 ## Phase 3 recovery implementation and local operations

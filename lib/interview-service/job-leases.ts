@@ -14,6 +14,8 @@ export async function claimJob(service: InterviewService, controlOnly = false): 
   });
 }
 export async function ownsLease(db: PoolClient,job: Job): Promise<boolean> {
+  // Match deletion's interview-before-job ordering, including stale execution/assessment callbacks.
+  if (job.interview_id) await db.query("SELECT id FROM service_interviews WHERE id=$1 FOR UPDATE",[job.interview_id]);
   return Boolean((await db.query("SELECT id FROM service_jobs WHERE id=$1 AND status='running' AND lease_token=$2 AND lease_until>now() FOR UPDATE",[job.id,job.lease_token])).rowCount);
 }
 export async function finishJob(db: PoolClient,job: Job) {

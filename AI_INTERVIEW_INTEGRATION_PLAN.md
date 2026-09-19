@@ -455,3 +455,44 @@ Verification: 51 unit/contract/transport tests passed, plus 23 PostgreSQL tests 
 - A bounded receiver-outage replay first targeted an unused local port. The same delivery job remained pending with one attempt and the generic `job_failed` operational code. Restoring the endpoint let attempt two complete; Recooty retained exactly one processed inbox row for the event. Polling remains enabled as recovery. No interview, invitation, charge, push or deployment was created.
 - Verification: 59 service tests ran with 57 passing and 2 database suites skipped by the unit command; all 25 Herd PostgreSQL integration tests passed separately. ESLint and TypeScript passed. Recooty's pinned-contract test passed 13 tests / 64 assertions. Production-policy tests reject HTTP, IP-literal, loopback/private, non-443, credential, fragment and unapproved destinations.
 - Production still requires an approved public HTTPS receiver and deployed outage verification before the production Phase 3 gate can close.
+
+
+## 18. Durable interview deletion — 2026-09-19
+
+Implemented the first bounded lifecycle/privacy slice for provisioned interviews. Automatic retention remains disabled: no timed retention job or default period was added.
+
+### Inventory and deletion boundary
+
+| Location | Interview data found | Deletion behavior |
+| --- | --- | --- |
+| Service interview | Candidate/job/configuration snapshot, metadata and caller references | Request erased on acceptance; original reference replaced by opaque service ID and a one-way duplicate-prevention fingerprint |
+| Service attempt/evidence | Transcript, result, raw observations, provider reference, encrypted SDP, consent fields | Content and SDP erased on acceptance; numeric usage preserved separately; provider reference retained only while termination is unresolved, then removed |
+| Candidate access | Hashed invitations and scoped session credentials | Rows removed on acceptance under the interview lock; start/read/connection paths recheck revocation |
+| Service command cache | Encrypted creation/cancellation responses and invitation URLs, including legacy commands without interview linkage | Responses erased and replay returns 410; necessary idempotency identities remain |
+| Service outbox/jobs | Caller references in event bodies; jobs contain resource/event IDs | Prior event bodies and delivery jobs removed, assessments fenced; one minimal `interview.deleted` event after local cleanup |
+| Service usage/reservations | Measured quantities, zero-charge settlements, caller references | External references removed, numeric settlement/provisional evidence and reservation facts retained; deleted interviews excluded from normal usage pages |
+| ATS interview | Encrypted request/report/link, creator/application linkage | Content erased and access denied when requested; application FK detached only after service confirms local deletion |
+| ATS commands/inboxes/usage | Command payloads, encrypted webhook/usage inboxes, JSON settlement copies | Payloads erased, stale jobs/events/pages ignored, minimal numeric ledger facts retained |
+| Shared credentials/storage | Account API credentials, webhook signing keys, provider account secrets | Shared tenant infrastructure is not interview-owned and is not revoked by one interview deletion |
+| Outside this mapping | Legacy MVP SQLite/import archives, already sent mail/downloads, provider persistence, backups | No mapping or purge evidence; this workflow makes no deletion claim for these stores |
+
+The retained IDs, tenant ownership, timestamps, numeric audit and duplicate-prevention fingerprints serve settlement/retry isolation only. They are not candidate profiles or transcripts and should not be described as proven anonymous data. Client reference/idempotency fields must remain opaque and must not contain personal information. No audit-retention period is selected here.
+
+### Workflow and recovery
+
+- Tenant-authorized `DELETE /v1/interviews/{id}` uses the existing `interviews:write` scope and mandatory idempotency key, returns 202, and immediately revokes service access and erases local content. Duplicate acceptance is safe across restarts and credentials. `GET /v1/interviews/{id}/deletion` returns `deletion_pending` or `deleted`; ordinary interview/result/link access returns 410.
+- The durable delete job retries at bounded intervals without the ordinary six-attempt ceiling. Active execution receives a stop request; numeric closure observations can settle usage, but late transcript/assessment/SDP output cannot repopulate the record. A queued attempt is never created solely to delete it. Leases and interview locks fence stale jobs, and reference fingerprints prevent create retries from resurrecting deleted interviews.
+- Known remote sessions must close or accept hangup before local completion. Unknown provider creation stays pending with `provider_outcome_unknown`; failed hangup and unavailable adapters are separately visible. Content is still erased while blocked. Provisional usage and held numeric reservations are not invented, finalized, or released merely to finish deletion.
+- `deleted` acknowledges local service erasure and known execution termination only. It does not mean provider-retained data, backup media, browser copies or delivered email were purged.
+- Recooty accepts the existing authenticated action route with `action=delete` and a UUID request key. It immediately removes ATS copies and queues a stable remote delete command, then polls the deletion status. The service must receive that command before remote candidate access can be revoked; a network outage remains visibly pending. No new recruiter deletion UI was added in this bounded slice.
+- A signed deletion event resolves by service ID, not erased external candidate/application references. Polling recovers missed callbacks through the service's 410 response. Stale reports, links, notifications, usage pages and callbacks cannot restore local copies after the ATS tombstone. Deletion stays available to authorized tenant users when the pilot feature is disabled.
+- Application soft deletion now locks against new interview creation and queues cleanup of its provisioned AI interviews. An unresolved ATS create must be reconciled first; deletion returns 409 rather than risking an orphaned remote interview. Team hard deletion remains restricted by workspace/audit ownership; this slice does not erase a team or remove its accounting.
+- Recovery uses the existing worker and `interviews:reconcile` mechanisms. No automatic retention schedule was introduced. Rollback/restore procedures must preserve tombstones and prevent old jobs/backups from republishing erased data; a backup restore drill remains future acceptance work.
+
+### Verification and local operations
+
+- Service: 33 Herd PostgreSQL tests passed using disposable schemas and mocked providers, including tenant isolation, duplicate deletion, legacy command erasure, concurrent start/delete, create replay, late transcript/assessment, stop failure, unknown provider creation, transactional cleanup rollback/retry and stale lease fencing. 59 unit/contract/transport tests passed; the unit invocation skips the three database suites. Lint and non-incremental TypeScript passed.
+- Recooty: 44 focused deletion and existing integration/client/status tests / 315 assertions passed; existing nested application/human-interview regression is recorded in the checkpoint. Includes delayed/reordered events, report/link/usage races, disabled-pilot deletion, wrong-workspace confirmation, retry exhaustion bypass and application detachment. Pint passed. No frontend change or build was needed.
+- Applied only additive service migration 003 and Recooty migration `2026_09_19_170401_add_deletion_state_to_ai_interviews.php` to local Herd databases. No existing interview was selected for deletion; all destructive verification used disposable synthetic fixtures.
+- The earlier Next/ATS workers exited outside this task. Restored Next HTTPS with existing Herd TLS files; authenticated capabilities returned 200 and an unknown deletion-status resource returned 404. No service or ATS worker was started. Start only dedicated workers when processing is required, after rechecking active attempts and pending jobs.
+- Exact-host allowlisting is unchanged. Production remains public IPv4 HTTPS on port 443 with its acceptance gate deferred. No paid provider session, invitation, billing, push, deployment or production configuration change occurred.

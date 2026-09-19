@@ -13,7 +13,7 @@ export async function exchangeInvitation(service: InterviewService, token: unkno
     const link = (await db.query(`SELECT * FROM service_access_links WHERE token_hash=$1 AND revoked_at IS NULL
       AND claimed_at IS NULL AND expires_at>now() FOR UPDATE`,[hashToken(token)])).rows[0];
     const account = (await db.query("SELECT id FROM service_accounts WHERE id=$1 AND disabled_at IS NULL",[row.account_id])).rows[0];
-    if (!link || !account || row.execution_status !== "ready" || Date.parse(row.request.availability.last_start_at) <= Date.now()) throw new ServiceError(401,"invalid_invitation");
+    if (!link || !account || row.deletion_requested_at || row.execution_status !== "ready" || Date.parse(row.request.availability.last_start_at) <= Date.now()) throw new ServiceError(401,"invalid_invitation");
     const session = newToken("candidate");
     await db.query("UPDATE service_access_links SET claimed_at=now() WHERE id=$1",[link.id]);
     await db.query("INSERT INTO service_candidate_sessions(id,interview_id,link_id,token_hash,expires_at) VALUES ($1,$2,$3,$4,$5)",
@@ -26,7 +26,7 @@ export async function candidateRow(db: PoolClient, token: string | null, lock: b
   const found = await db.query<InterviewRow>(`SELECT i.* FROM service_interviews i
     JOIN service_candidate_sessions s ON s.interview_id=i.id
     JOIN service_access_links l ON l.id=s.link_id JOIN service_accounts a ON a.id=i.account_id
-    WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND l.revoked_at IS NULL AND a.disabled_at IS NULL
+    WHERE s.token_hash=$1 AND i.deletion_requested_at IS NULL AND s.revoked_at IS NULL AND s.expires_at>now() AND l.revoked_at IS NULL AND a.disabled_at IS NULL
     ${lock ? "FOR UPDATE OF i" : ""}`, [hashToken(token)]);
   if (!found.rowCount) throw new ServiceError(401,"invalid_session");
   // Under READ COMMITTED, recheck revocation after waiting for the interview lock.
@@ -42,7 +42,7 @@ function candidateView(row: InterviewRow) {
     environment: "test", transport: row.execution_provider === "fake" ? "sandbox" : "webrtc" };
 }
 export async function candidateStatus(service: InterviewService, token: string | null) {
-  return transaction(service.pool, async db => candidateView(await candidateRow(db,token,false)));
+  return transaction(service.pool, async db => candidateView(await candidateRow(db,token,true)));
 }
 export async function startCandidate(service: InterviewService, token: string | null, input: { sdp?: string; consent_version?: string } = {}) {
   return transaction(service.pool,async db => {
@@ -83,7 +83,7 @@ export async function startCandidate(service: InterviewService, token: string | 
 
 export async function candidateConnection(service: InterviewService, token: string | null) {
   return transaction(service.pool, async db => {
-    const row = await candidateRow(db,token,false);
+    const row = await candidateRow(db,token,true);
     if (!row.attempt_id) throw new ServiceError(409,"not_started");
     const attempt = (await db.query("SELECT connection_state,answer_ciphertext,deadline_at FROM service_attempts WHERE id=$1", [row.attempt_id])).rows[0];
     return { ...candidateView(row), connection_state: attempt.connection_state, deadline_at: attempt.deadline_at.toISOString(),

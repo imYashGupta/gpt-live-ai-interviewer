@@ -116,17 +116,19 @@ Recooty:
 - ATS origin: `http://recooty.test`, served by Herd
 - Enabled team: **CloudTech, team 1**. Other teams remain disabled.
 - Live allowlist is configured for the existing Recooty service account.
-- Invitations disabled. Customer billing zero. No public webhook endpoint is activated for this local receiver.
+- Invitations disabled. Customer billing zero. The local HTTP Recooty webhook endpoint is active only for the non-production allowlisted environment; there is no public production endpoint.
 - Service ignored `.env` / `.env.local` contain the OpenAI key, existing Herd database configuration, origin and encryption key. Recooty's ignored `.env` contains its integration configuration. Do not print or copy secrets into committed files.
 - `.data/recooty-test-credential.json` is the existing private service credential file; use only for authorized service API actions. Do not fabricate login cookies or bypass recruiter authentication.
 - API calls from Node can use `--use-system-ca` to trust the installed Herd certificate; keep TLS verification enabled.
 
-At handoff the following processes were running (PIDs/session handles can change):
+At handoff, the Next HTTPS dev process was restarted in tool session `82895` after Recooty displayed its service-unavailable fallback. Recooty's authenticated capabilities request then succeeded with schema version `1.0` and adaptive mode. Session handles can change; verify the endpoint instead of assuming the process survived. Older service-worker and ATS-worker PIDs in historical notes were not revalidated or restarted during this slice.
 
-- Next HTTPS dev process, originally PID 4218
-- Service worker PID 90484, started with `npm run service:worker`
-- Dedicated ATS worker PID 73182 (replaced 7019 after the Phase 3 usage migration):
-  `php artisan queue:work ai --queue='{ai-interview-pilot}' --sleep=1 --timeout=160 --tries=1 --no-interaction`
+When background processing is needed, start only the dedicated workers after checking for existing matching processes:
+
+```sh
+npm run service:worker
+php artisan queue:work ai --queue='{ai-interview-pilot}' --sleep=1 --timeout=160 --tries=1 --no-interaction
+```
 
 Before restarting the service worker, inspect active attempts; graceful shutdown drains work. Do not kill unrelated processes. Full ATS scheduler/Horizon was not started by this task.
 

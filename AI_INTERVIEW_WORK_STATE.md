@@ -31,7 +31,7 @@ Updated: 2026-09-19. Read NEXT_TASK_HANDOFF.md and plan sections 16–17 for det
 ## Runtime and unresolved records
 
 - Only local ATS migration `2026_09_18_171835_create_ai_interview_usage_inbox_table.php` applied. No service migration needed.
-- The local endpoint is active at `http://recooty.test/api/interview-service/webhook`; its secret exists only in Recooty's ignored local environment. The bounded Next HTTPS process was stopped after acceptance. No persistent service or queue worker was started by this task; recheck current processes before relying on older PIDs.
+- The local endpoint is active at `http://recooty.test/api/interview-service/webhook`; its secret exists only in Recooty's ignored local environment. Recooty later showed its service-unavailable fallback because the bounded Next HTTPS process had been stopped. The documented HTTPS dev server was restarted in tool session `82895`; Recooty then authenticated to `/v1/capabilities` and received schema version `1.0` with adaptive mode. Recheck the process before relying on that session. No persistent service or queue worker was started by this task.
 - No active service attempts at runtime inspection. ATS reconciliation ran with zero pending commands; all integration mappings are team 1.
 - Usage inbox: nine received, eight imported, one `mapping_pending` service-only test (`set_db1d1d5300740ba7029bdc11a41d5746`, `int_dc441a06a9a6241bf497bf5ee8fdcc8c`). It has no ATS row and must not be assigned arbitrarily. It no longer blocks other records or cursor advancement.
 

@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "./candidate-interview.module.css";
+import {
+  CandidateClosed,
+  CandidateGuide,
+  CandidateHeader,
+  CandidateOrb,
+} from "./candidate-presentation";
 
 export type CandidateSession = {
   job_title: string;
@@ -29,7 +35,6 @@ async function request(path: string, input?: unknown, signal?: AbortSignal) {
     throw new Error(result.error?.message ?? "Please try again.");
   return result;
 }
-const button = styles.button;
 export default function CandidateLiveRoom({
   session,
   onStatus,
@@ -40,7 +45,9 @@ export default function CandidateLiveRoom({
   const [consent, setConsent] = useState(false),
     [busy, setBusy] = useState(false),
     [ending, setEnding] = useState(false),
-    [muted, setMuted] = useState(false);
+    [endPending, setEndPending] = useState(false),
+    [muted, setMuted] = useState(false),
+    [playbackBlocked, setPlaybackBlocked] = useState(false);
   const [message, setMessage] = useState(""),
     [connected, setConnected] = useState(false),
     [remaining, setRemaining] = useState<number | null>(null);
@@ -74,6 +81,7 @@ export default function CandidateLiveRoom({
   }, []);
   useEffect(() => {
     if (!["in_progress", "ready"].includes(session.execution_status)) {
+      submitted.current = false;
       release();
     }
   }, [session.execution_status]);
@@ -86,6 +94,14 @@ export default function CandidateLiveRoom({
     }, 1000);
     return () => window.clearInterval(timer);
   }, []);
+  async function enableAudio() {
+    try {
+      await audio.current?.play();
+      setPlaybackBlocked(false);
+    } catch {
+      setPlaybackBlocked(true);
+    }
+  }
   async function start() {
     if (busy || peer.current || !consent) return;
     setBusy(true);
@@ -106,14 +122,10 @@ export default function CandidateLiveRoom({
       // The service disables frontend provider commands. This channel is never used to submit evidence.
       connection.createDataChannel("oai-events");
       connection.ontrack = (event) => {
-        if (audio.current) {
+        if (audio.current && !endRequested.current) {
           audio.current.srcObject =
             event.streams[0] ?? new MediaStream([event.track]);
-          void audio.current
-            .play()
-            .catch(() =>
-              setMessage("Press play below to hear the interviewer.")
-            );
+          void enableAudio();
         }
       };
       connection.onconnectionstatechange = () => {
@@ -122,10 +134,12 @@ export default function CandidateLiveRoom({
           setConnected(true);
           setMessage("Interview in progress.");
         }
-        if (["failed", "disconnected"].includes(connection.connectionState))
+        if (["failed", "disconnected"].includes(connection.connectionState)) {
+          setConnected(false);
           setMessage(
             "Audio connection interrupted. If it does not recover, end the interview and contact the recruiter."
           );
+        }
       };
       await connection.setLocalDescription(await connection.createOffer());
       await new Promise<void>((resolve) => {
@@ -190,9 +204,12 @@ export default function CandidateLiveRoom({
   async function stop() {
     if (busy) return;
     // Keep WebRTC alive until the provider confirms closure. Disable capture immediately.
-    microphone.current?.getAudioTracks().forEach((track) => { track.enabled = false; });
+    microphone.current?.getAudioTracks().forEach((track) => {
+      track.enabled = false;
+    });
     audio.current?.pause();
     endRequested.current = true;
+    setEndPending(true);
     setEnding(true);
     setConnected(false);
     setBusy(true);
@@ -205,18 +222,21 @@ export default function CandidateLiveRoom({
         onStatus(state);
         if (state.execution_status !== "in_progress") {
           submitted.current = false;
-          setMessage(state.execution_status === "completed"
-            ? "Interview ended. Your transcript will be processed for the recruiter."
-            : "The interview has closed. The recruiter will receive its final status and available transcript.");
+          setMessage(
+            state.execution_status === "completed"
+              ? "Interview ended. Your transcript will be processed for the recruiter."
+              : "The interview has closed. The recruiter will receive its final status and available transcript."
+          );
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       if (alive.current) throw new Error("End confirmation timed out");
     } catch {
-      if (alive.current) setMessage(
-        "Could not confirm the end request. Your microphone is off. Please retry ending the interview."
-      );
+      if (alive.current)
+        setMessage(
+          "Could not confirm the end request. Your microphone is off. Please retry ending the interview."
+        );
     } finally {
       release();
       if (alive.current) {
@@ -226,99 +246,236 @@ export default function CandidateLiveRoom({
     }
   }
   const active = session.execution_status === "in_progress";
+  const ready = session.execution_status === "ready";
+  const closed = !active && !ready;
+  const finishing = active && endPending;
+  const showTime = active && remaining !== null && !finishing;
+  const status = closed
+    ? "ended"
+    : finishing
+    ? "ending"
+    : busy
+    ? "connecting"
+    : connected
+    ? "connected"
+    : active
+    ? "error"
+    : "idle";
+  const statusLabel = closed
+    ? "Closed"
+    : finishing
+    ? "Ending"
+    : busy
+    ? "Connecting"
+    : connected
+    ? "Connected"
+    : active
+    ? "Connection needed"
+    : "Ready";
+  const stageTitle = ready
+    ? "Before we begin"
+    : finishing
+    ? "Ending your interview…"
+    : remaining === 0
+    ? "Time is up. Finishing…"
+    : remaining !== null && remaining <= 20
+    ? "Wrapping up"
+    : "Your conversation";
   return (
-    <section className={styles.card}>
-      <h2>{session.job_title}</h2>
-      <p>{session.duration_limit_seconds / 60} minute audio interview</p>
-      <p>Status: {session.execution_status.replaceAll("_", " ")}</p>
-      {session.execution_status === "ready" && (
-        <>
-          <p>
-            Your microphone audio is processed live. A transcript and an
-            AI-generated assessment will be saved and shared with the recruiter
-            for review. You can mute or end the interview at any time.
-          </p>
-          <p>
-            No audio recording is stored by this application. Keep this tab open
-            during the interview; reloading cannot restore the audio connection.
-          </p>
-          <label className={styles.consent}>
-            <input
-              type="checkbox"
-              checked={consent}
-              disabled={busy}
-              onChange={(e) => setConsent(e.target.checked)}
-            />
-            I agree to the audio processing and transcript-based assessment
-            described above.
-          </label>
+    <div className={`room-shell ${styles.room}`}>
+      <CandidateHeader>
+        <span
+          className={`connection-pill ${status} ${styles.status}`}
+          role="status"
+        >
+          <i aria-hidden="true" />
+          {statusLabel}
+        </span>
+        {active && (
           <button
-            className={`${button} ${styles.primary}`}
-            disabled={!consent || busy}
-            onClick={() => void start()}
+            className={`end-button ${styles.endButton}`}
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              if (window.confirm("End this interview now?")) void stop();
+            }}
           >
-            Start interview
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="1" />
+            </svg>
+            {ending ? "Ending…" : "End interview"}
           </button>
-        </>
-      )}
+        )}
+      </CandidateHeader>
       <audio
         ref={audio}
         autoPlay
-        controls
+        playsInline
         aria-label="Interviewer audio"
-        className={styles.audio}
-        hidden={!active}
+        className="remote-audio"
       />
-      {active && (
-        <>
-          {remaining !== null && !ending && (
-            <p>
-              {remaining === 0 ? "Time is up. Ending your interview…" : <>
-                {remaining <= 20 ? "Wrapping up. Time remaining: " : "Time remaining: "}{Math.floor(remaining / 60)}:
-                {String(remaining % 60).padStart(2, "0")}
-              </>}
+      {closed ? (
+        <CandidateClosed status={session.execution_status} />
+      ) : (
+        <div className={`room-layout ${styles.layout}`}>
+          <section
+            className={`conversation-stage ${styles.stage}`}
+            aria-labelledby="stage-title"
+          >
+            <div className={`stage-topbar ${styles.topbar}`}>
+              <div>
+                <p className="panel-kicker">
+                  {session.duration_limit_seconds / 60} minute audio interview
+                </p>
+                <h1 id="stage-title">{session.job_title}</h1>
+                <p className={styles.stageLabel}>{stageTitle}</p>
+              </div>
+              {showTime && (
+                <div
+                  className={`timer ${styles.timer}`}
+                  aria-label="Time remaining"
+                >
+                  <span>
+                    {Math.floor(remaining / 60)}:
+                    {String(remaining % 60).padStart(2, "0")}
+                  </span>
+                  <small>remaining</small>
+                </div>
+              )}
+            </div>
+            {showTime && (
+              <div className="progress-track" aria-hidden="true">
+                <span
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        0,
+                        (1 - remaining / session.duration_limit_seconds) * 100
+                      )
+                    )}%`,
+                  }}
+                />
+              </div>
+            )}
+            <p className={styles.notice} role="status" aria-live="polite">
+              {message}
             </p>
-          )}
-          {!connected && !busy && (
-            <p>
-              If this interview is open in another tab, return there. Otherwise,
-              end it and contact the recruiter.
-            </p>
-          )}
-          <div className={styles.actions}>
-            <button
-              className={button}
-              disabled={!connected || busy}
-              onClick={() => {
-                microphone.current?.getAudioTracks().forEach((t) => {
-                  t.enabled = muted;
-                });
-                setMuted(!muted);
-              }}
-            >
-              {muted ? "Unmute microphone" : "Mute microphone"}
-            </button>
-            <button
-              className={button}
-              disabled={busy}
-              onClick={() => {
-                if (window.confirm("End this interview now?")) void stop();
-              }}
-            >
-              End interview
-            </button>
-          </div>
-        </>
+            {playbackBlocked && active && !finishing && (
+              <div className={styles.audioAlert} role="alert">
+                <p>Your browser has paused the interviewer’s audio.</p>
+                <button
+                  className={styles.button}
+                  onClick={() => void enableAudio()}
+                >
+                  Enable sound
+                </button>
+              </div>
+            )}
+            <div className="participants">
+              <CandidateOrb
+                label={
+                  finishing
+                    ? "Wrapping up…"
+                    : busy
+                    ? "Preparing the room…"
+                    : connected
+                    ? "Audio connected"
+                    : "Waiting to connect"
+                }
+              />
+              <article className="participant candidate">
+                <div className="candidate-avatar" aria-hidden="true">
+                  You
+                </div>
+                <div className="candidate-info">
+                  <p className="panel-kicker">Candidate</p>
+                  <h2>Your space to shine</h2>
+                  <span>
+                    <i
+                      className={
+                        !connected || muted || finishing ? "muted" : ""
+                      }
+                      aria-hidden="true"
+                    />
+                    {finishing
+                      ? "Microphone off"
+                      : !connected
+                      ? "Microphone not connected"
+                      : muted
+                      ? "Microphone muted"
+                      : "Microphone on"}
+                  </span>
+                </div>
+              </article>
+            </div>
+            {ready ? (
+              <div className={styles.preflight}>
+                <p>
+                  When you start, your browser will ask for microphone access.
+                  Reloading this page cannot restore a live audio connection.
+                </p>
+                <label className={styles.consent}>
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    disabled={busy}
+                    onChange={(e) => setConsent(e.target.checked)}
+                  />
+                  I agree to live audio processing and to a transcript and
+                  AI-generated assessment being saved and shared with the
+                  recruiter for review.
+                </label>
+                <button
+                  className={`${styles.button} ${styles.primary}`}
+                  disabled={!consent || busy}
+                  onClick={() => void start()}
+                >
+                  {busy ? "Preparing your interview…" : "Start interview"}
+                </button>
+              </div>
+            ) : (
+              <>
+                {!connected && !busy && !finishing && (
+                  <p className={styles.notice}>
+                    If this interview is open in another tab, return there.
+                    Otherwise, end it and contact the recruiter. Reloading
+                    cannot restore the audio connection.
+                  </p>
+                )}
+                <div className="room-controls">
+                  <button
+                    className={`control-button ${muted ? "active" : ""} ${
+                      styles.muteButton
+                    }`}
+                    disabled={!connected || busy || finishing}
+                    aria-pressed={muted}
+                    onClick={() => {
+                      microphone.current?.getAudioTracks().forEach((track) => {
+                        track.enabled = muted;
+                      });
+                      setMuted(!muted);
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <rect x="9" y="3" width="6" height="11" rx="3" />
+                      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
+                      {muted && <path d="m3 3 18 18" />}
+                    </svg>
+                    {muted ? "Unmute microphone" : "Mute microphone"}
+                  </button>
+                  <p>
+                    {finishing
+                      ? "Your microphone is off while we confirm the end."
+                      : "Speak naturally — pauses and interruptions are welcome."}
+                  </p>
+                </div>
+              </>
+            )}
+          </section>
+          <CandidateGuide ready={ready} />
+        </div>
       )}
-      {!active && session.execution_status !== "ready" && (
-        <p>
-          Your interview has ended. The recruiter will receive the available
-          transcript and results.
-        </p>
-      )}
-      <p className={styles.message} role="status" aria-live="polite">
-        {active || session.execution_status === "ready" ? message : "Interview closed."}
-      </p>
-    </section>
+    </div>
   );
 }

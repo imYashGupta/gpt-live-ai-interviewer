@@ -7,11 +7,22 @@ Updated 2026-09-19. Read `AI_INTERVIEW_WORK_STATE.md` first for the latest resum
 The **local Phase 3 report-delivery and recovery slice is complete**. See sections 16–17 of AI_INTERVIEW_INTEGRATION_PLAN.md. Real signed HTTP delivery and retry after a bounded local receiver outage passed against Recooty. Public production delivery and the deployed outage gate remain open. Do not enable paid billing yet.
 
 1. When an approved public HTTPS receiver is available, repeat signed delivery and deployed outage acceptance in production mode, then implement ownership verification and signing-key rotation. Exact-host allowlisting and the public IPv4 HTTPS/443 policy remain required.
-2. If staging remains unavailable, the next useful independent slice is the deferred candidate presentation: restore the preferred original MVP look while retaining service-owned capture, timing, completion, assessment and metering. Broader lifecycle/privacy/retention prerequisites also remain before production or paid allowances.
+2. The candidate presentation slice is now implemented and verified (see below). If staging remains unavailable, the next independent slice is lifecycle/privacy/retention prerequisites before production or paid allowances.
 3. Keep using existing synthetic results and existing Herd PostgreSQL. Do not create paid sessions solely to re-prove report delivery; do not send invitations, push, deploy or enable charging without a new request.
 4. Keep the canonical checkpoint current and commit related changes at meaningful boundaries on the existing branches.
 
-The user preferred the original MVP UI, but explicitly accepted deferring that work. A subsequent candidate-experience slice should reuse its presentation while retaining the new service-owned session/evidence/metering flow. Do not copy the MVP's browser-authoritative provider controls into the integrated room.
+The preferred original MVP presentation has been restored to the integrated candidate flow. Its browser-authoritative provider controls, reports, costs and debug UI were not copied. The current candidate API has no live-caption projection; the sidebar provides preparation/privacy guidance instead.
+
+## Candidate presentation slice — completed locally
+
+- `/join` now uses the MVP's warm background, brand, coral orb on a dark green stage, participant card, responsive room layout and controls. Consent remains explicit before microphone access. The ready screen describes live processing and recruiter assessment; completion distinguishes successful completion from other terminal outcomes.
+- Added an explicit **Enable sound** action for blocked autoplay and correct disconnected status. End disables capture immediately, keeps WebRTC until service confirmation (or the existing bounded timeout), and permits retry with the microphone off. Countdown/progress use the service deadline and cannot finalize the interview. Reload still cannot restart a live attempt.
+- No backend/API/provider changes, dependencies, migrations, ATS edits, paid provider sessions, invitations, billing, worker starts, push or deployment. Production webhook gate and host policy remain unchanged.
+- Lint, non-incremental TypeScript, whitespace checks and 57 service tests passed (2 database suites skipped). The existing database suite was not rerun for presentation-only changes.
+- `tests/browser/candidate-presentation.js` passed with intercepted candidate HTTP and mocked media/WebRTC: consent, microphone denial, playback recovery, mute, connection loss/recovery, stop retry/ordering, service completion, reload, revocation and terminal states. Desktop/mobile screenshots were inspected at 1440/390px, without horizontal overflow. Expected simulated HTTP 503/401 failures produced network console messages; no page exceptions.
+- Re-run with the Playwright CLI skill in an isolated session: open the existing HTTPS `/join` page, then `playwright-cli --session candidate-presentation run-code --filename tests/browser/candidate-presentation.js`. The script starts from a fresh document, removes its HTTP routes afterward and leaves the page blank. Close that isolated browser afterward to discard its media init scripts. It must never be used for a real interview.
+- Ignored visual evidence is in `output/playwright/candidate-*.png`. The orb is decorative; it does not claim to detect speech. Live captions would require a separately designed, service-owned read-only projection rather than trusting browser provider events.
+- Reconciled service `bbbf48c` / ATS `7d9031833` at start. Only the related service presentation/checkpoint files are committed for this slice; preserve service `tsconfig.tsbuildinfo` and ATS `composer.lock`.
 
 ## Product and architecture decisions
 
@@ -97,7 +108,9 @@ Service:
 - `lib/interview-service/providers/openai-live.ts`: provider configuration, sideband greeting/clock/closing
 - `lib/interview-service/providers/openai-live-observation.ts`: provider event normalization
 - `lib/interview-service/worker.ts`, `delivery.ts`, `job-leases.ts`: durable work/delivery
-- `components/candidate-live-room.tsx`, `app/join/join.tsx`: integrated candidate room
+- `components/candidate-live-room.tsx`, `app/join/join.tsx`: integrated candidate room and admission
+- `components/candidate-presentation.tsx`, `candidate-interview.module.css`: candidate presentation reusing MVP room styles
+- `tests/browser/candidate-presentation.js`: mocked candidate presentation/lifecycle browser regression
 - `components/interview-app.tsx`, `interview-room.tsx`, `transcript-panel.tsx`: original MVP reference only
 - `scripts/interview-service.mjs`: migrate/provision/worker/attempts/jobs/replay operator commands
 - `INTERVIEW_SERVICE_SETUP.md`: setup, operational boundaries and acceptance checks

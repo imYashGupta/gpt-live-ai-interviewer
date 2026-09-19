@@ -126,3 +126,280 @@
     width: 100%;
   }
 }
+
+/* Reuse the MVP room, orb and participant styles; keep candidate-only layout scoped. */
+.liveShell {
+  min-height: 100vh;
+}
+.room .header {
+  gap: 16px;
+}
+.room .header :global(.brand) {
+  flex-shrink: 0;
+}
+.room .status {
+  display: inline-flex;
+}
+.room .endButton,
+.room .muteButton {
+  min-height: 44px;
+  height: auto;
+  font-size: 13px;
+}
+.room button:focus-visible {
+  outline: 3px solid var(--green);
+  outline-offset: 4px;
+}
+.room .layout {
+  width: min(1240px, calc(100% - 48px));
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 1fr);
+}
+.room .stage {
+  min-width: 0;
+  min-height: auto;
+}
+.room .topbar {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.room .topbar h1 {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+  font-size: clamp(22px, 3vw, 30px);
+}
+.stageLabel {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+.room .timer {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+  padding-top: 6px;
+}
+.room .timer small {
+  font: 12px var(--font-geist-sans), sans-serif;
+  color: var(--ink-soft);
+}
+.room :global(.panel-kicker) {
+  font-size: 11px;
+}
+.room :global(.speaking-label) {
+  font-size: 12px;
+  white-space: nowrap;
+}
+.room :global(.candidate-info > span),
+.room :global(.room-controls p) {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+.room :global(.candidate-info h2) {
+  font-size: 18px;
+}
+.room :global(.ai-tag),
+.room :global(.voice-name) {
+  font-size: 10px;
+}
+.room :global(.room-controls) {
+  gap: 16px;
+}
+.guide {
+  align-self: start;
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--card);
+}
+.guide h2 {
+  font-size: 25px;
+  line-height: 1.25;
+  letter-spacing: -0.8px;
+  margin: 10px 0 28px;
+}
+.tips {
+  list-style: none;
+  counter-reset: tips;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 26px;
+}
+.tips li {
+  position: relative;
+  padding-left: 40px;
+  counter-increment: tips;
+}
+.tips li::before {
+  content: counter(tips, decimal-leading-zero);
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--green);
+  font: 12px var(--font-geist-mono), monospace;
+  padding-top: 3px;
+}
+.tips strong,
+.nextSteps strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+.tips p,
+.privacy p,
+.preflight > p,
+.nextSteps p {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--ink-soft);
+  margin: 7px 0 0;
+}
+.privacy {
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+  margin-top: 30px;
+}
+.preflight {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+}
+.notice {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--green-light);
+  color: var(--green);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.notice:empty {
+  display: none;
+}
+.audioAlert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid #dfc8c1;
+  background: #fff8f5;
+  border-radius: 12px;
+}
+.audioAlert p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.audioAlert button {
+  flex-shrink: 0;
+}
+.welcome {
+  padding: clamp(28px, 5vw, 54px);
+  gap: 24px;
+}
+.welcome h1 {
+  font-size: clamp(32px, 5vw, 46px);
+  letter-spacing: -1.8px;
+}
+.welcomeDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 600;
+}
+.welcomeDetails span::before {
+  content: "✓";
+  margin-right: 6px;
+}
+.closed {
+  width: min(680px, calc(100% - 40px));
+  margin: 64px auto 0;
+  padding: 44px;
+  gap: 20px;
+}
+.closed h1 {
+  font-size: clamp(30px, 5vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -1px;
+  margin: 0;
+}
+.closed p {
+  margin: 0;
+  line-height: 1.65;
+}
+.closedMark {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--green-light);
+  color: var(--green);
+  font-size: 30px;
+}
+.nextSteps {
+  width: 100%;
+  padding: 20px;
+  background: var(--paper);
+  border-radius: 12px;
+}
+.liveShell > div > .message {
+  width: min(1240px, calc(100% - 48px));
+  margin: 20px auto;
+}
+@media (max-width: 900px) {
+  .room .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 540px) {
+  .room .header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+  .room .header :global(.header-actions) {
+    gap: 8px;
+  }
+  .room .status {
+    padding: 0 8px;
+  }
+  .room .layout {
+    width: calc(100% - 24px);
+    margin-top: 14px;
+  }
+  .room .stage,
+  .guide {
+    padding: 18px;
+  }
+  .room .topbar {
+    gap: 12px;
+  }
+  .room .topbar h1 {
+    font-size: 23px;
+  }
+  .room :global(.participant.candidate) {
+    padding: 16px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .room :global(.candidate-avatar) {
+    width: 44px;
+    height: 44px;
+  }
+  .room :global(.candidate-info h2) {
+    font-size: 16px;
+  }
+  .audioAlert {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .closed {
+    padding: 28px;
+    margin-top: 28px;
+  }
+}

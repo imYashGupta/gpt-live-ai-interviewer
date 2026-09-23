@@ -40,12 +40,19 @@ export async function emitEvent(db: PoolClient, row: InterviewRow, type: string,
   return event;
 }
 
-export async function recordShadowUsage(db: PoolClient,row: InterviewRow,attemptId: string,measured: number) {
+/** Billing policy lives here because only the service observes the outcome: service-side failures bill nothing. */
+export function billableSeconds(row: InterviewRow, outcome: string, measured: number, billed: boolean) {
+  // Deletion erases the request, and the client discards usage for deleted interviews.
+  if (!billed || row.deletion_requested_at || row.execution_provider === "fake" || !["completed","cancelled"].includes(outcome)) return 0;
+  return Math.min(measured,row.request.configuration.duration_limit_seconds);
+}
+export async function recordShadowUsage(db: PoolClient,row: InterviewRow,attemptId: string,measured: number,billable = 0) {
   // Serialize per-workspace insert/commit order so a usage cursor cannot skip an earlier uncommitted settlement.
   await db.query("SELECT id FROM service_workspaces WHERE id=$1 FOR UPDATE",[row.workspace_id]);
   const settlement = { record_type:"settlement", settlement_id:newId("set"),interview_id:row.id,attempt_id:attemptId,
     workspace_id:row.workspace_id,external_reference:row.deletion_requested_at ? row.id : row.external_reference,external_reservation_id:row.deletion_requested_at ? row.id : row.request.authorization_budget.external_reservation_id,
-    metric:"interview_seconds",measured_quantity:measured,billable_quantity:0,credit_quantity:"0.000000",rate_card_version:row.execution_provider === "fake" ? "sandbox_zero_v1" : "pilot_zero_v1",settled_at:new Date().toISOString() };
+    metric:"interview_seconds",measured_quantity:measured,billable_quantity:billable,credit_quantity:`${billable}.000000`,
+    rate_card_version:row.execution_provider === "fake" ? "sandbox_zero_v1" : billable ? "seconds_v1" : "pilot_zero_v1",settled_at:new Date().toISOString() };
   validate("Settlement",settlement);
   await db.query("INSERT INTO service_usage(id,workspace_id,attempt_id,measured_seconds,record) VALUES ($1,$2,$3,$4,$5)",[settlement.settlement_id,row.workspace_id,attemptId,measured,settlement]);
   await emitEvent(db,row,"usage.settled",settlement);
@@ -69,7 +76,10 @@ export class InterviewService {
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Service origin must be an HTTPS origin");
     this.pool = pool; this.key = encryptionKey; this.origin = url.origin;
   }
+  /** Accounts whose settlements carry billable seconds. This is not an allowance; the client enforces its own balance. */
+  billableAccountIds: string[] = [];
   liveEnabled(accountId: string) { return this.live?.accountIds.includes(accountId) === true; }
+  billed(accountId: string) { return this.billableAccountIds.includes(accountId); }
   capabilities(accountId: string) {
     return this.liveEnabled(accountId) ? { ...capabilities, interviewer_profile_ids: ["pilot_default"], rubric_version_ids: ["pilot_v1"] } : capabilities;
   }

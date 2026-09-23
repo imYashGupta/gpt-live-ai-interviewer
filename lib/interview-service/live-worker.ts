@@ -3,6 +3,7 @@ import { newId, seal, unseal } from "./security.ts";
 import {
   emitEvent,
   recordShadowUsage,
+  billableSeconds,
   type InterviewRow,
   type InterviewService,
 } from "./service.ts";
@@ -152,11 +153,13 @@ async function finalize(
         "UPDATE service_reservations SET status='settled' WHERE attempt_id=$1",
         [attempt.id]
       );
+      const measured = Math.ceil(state.cumulativeAudioMs / 1000);
       await recordShadowUsage(
         db,
         updated,
         attempt.id,
-        Math.ceil(state.cumulativeAudioMs / 1000)
+        measured,
+        billableSeconds(updated, outcome, measured, service.billed(row.account_id))
       );
     }
     // Unknown final usage stays provisional and keeps its quota reservation for operator reconciliation.

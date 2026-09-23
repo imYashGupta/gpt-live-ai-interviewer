@@ -331,6 +331,34 @@ test(
         }
       );
       await t.test(
+        "billable accounts settle exact used seconds; service failures settle nothing billable",
+        async () => {
+          service.billableAccountIds = [p.accountId];
+          try {
+            const x = await invite();
+            await startCandidate(service, x.session.token, offer);
+            events = fullEvents();
+            await run(x.interview.id);
+            const usage = await service.usage(p, x.input.workspace_id, null);
+            assert.equal(usage.data.length, 1);
+            assert.equal(usage.data[0].measured_quantity, 12);
+            assert.equal(usage.data[0].billable_quantity, 12);
+            assert.equal(usage.data[0].credit_quantity, "12.000000");
+            assert.equal(usage.data[0].rate_card_version, "seconds_v1");
+            const lost = await invite();
+            await startCandidate(service, lost.session.token, offer);
+            events = [...fullEvents().slice(0, 3), { ...closed(), outcome: "interrupted" }];
+            await run(lost.interview.id);
+            const failed = await service.usage(p, lost.input.workspace_id, null);
+            assert.equal(failed.data.length, 1);
+            assert.equal(failed.data[0].measured_quantity, 12);
+            assert.equal(failed.data[0].billable_quantity, 0);
+          } finally {
+            service.billableAccountIds = [];
+          }
+        }
+      );
+      await t.test(
         "lost creation response is quarantined without retrying provider creation",
         async () => {
           const x = await invite();

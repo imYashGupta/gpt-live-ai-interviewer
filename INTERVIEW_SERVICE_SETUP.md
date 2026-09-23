@@ -16,8 +16,10 @@ Use Node 22.18+ (native TypeScript stripping) and the installed npm dependencies
 
 ```sh
 npm run service:migrate
-npm run dev -- --experimental-https
+npm run build && npm run start -- --hostname 127.0.0.1 --port 3000
 ```
+
+For an HMR development server instead, substitute `npm run dev -- --hostname 127.0.0.1 --port 3000`. Neither command needs `--experimental-https`.
 
 In another terminal:
 
@@ -25,7 +27,7 @@ In another terminal:
 npm run service:worker
 ```
 
-The activated Herd pilot uses `https://interview-bot.test:3000`, with the existing `interview-bot.test` certificate and key passed to Next's HTTPS flags. `next.config.ts` explicitly allows that development hostname for HMR. The generic HTTPS command above uses `https://localhost:3000`; set the origin to match whichever address you run. Keep `INTERVIEW_SERVICE_ORIGIN` equal to the browser's HTTPS origin; candidate POST requests verify it. Secure candidate cookies require HTTPS. Next's HTTPS development command may set up a local certificate; an existing Herd HTTPS reverse proxy is also suitable when configured to forward to Next. Update the origin if using a different host or port.
+The activated Herd pilot uses `https://ai-interviewer.test`, served by a Herd nginx proxy site created with `herd proxy ai-interviewer http://127.0.0.1:3000 --secure`. Nginx terminates TLS with a trusted Herd certificate and forwards to Next over plain HTTP on loopback, so Next itself runs without `--experimental-https` and the origin carries no port. Herd's proxy stub already sets `X-Forwarded-Proto`, passes websocket upgrades, disables response buffering and allows 1800s upstream reads, which live sessions, streaming responses and HMR all need. `next.config.ts` allows `ai-interviewer.test` as a development origin for HMR; `allowedDevOrigins` matches the `Origin` hostname only, without scheme or port. Keep `INTERVIEW_SERVICE_ORIGIN` equal to the browser's HTTPS origin; candidate POST requests verify it. Secure candidate cookies require HTTPS. Update the origin, and the ATS `INTERVIEW_SERVICE_BASE_URL`, together if the host changes. The unrelated Laravel app at `/Users/yashgupta/Laravel/interview-bot/` keeps `interview-bot.test`; do not reuse that hostname here.
 
 On another installation, copy the service settings from `.env.example`, set `INTERVIEW_DATABASE_URL` to a **dedicated database**, generate a stable 32-byte hex `INTERVIEW_SERVICE_ENCRYPTION_KEY`, then enable `INTERVIEW_SERVICE_ENABLED=true`. Share that key between the API and worker; keep it in a secret manager in deployment. Changing it without re-encrypting rows invalidates encrypted replay responses and webhook secrets.
 
@@ -105,7 +107,7 @@ INTERVIEW_WORKER_CONCURRENCY=4
 
 Set `OPENAI_API_KEY` server-side. Do not reuse the example account ID; allowlist the explicitly selected internal service account. The code still uses the existing test credential namespace and test account environment for this unbilled integration pilot; full production/test account separation remains a rollout prerequisite. `INTERVIEW_LIVE_ENABLED` defaults to false. The local Recooty service account is now enabled for the CloudTech internal pilot; other installations remain opt-in.
 
-In Recooty, keep the explicit internal team allowlist. For a live-pilot account set `INTERVIEW_SERVICE_SANDBOX=false` so its screen and optional invitation accurately describe an actual interview, rather than synthetic data. Keep `INTERVIEW_SERVICE_ALLOW_INVITATIONS=false` until an internal delivery test is authorized. This flag change does not enable customer billing. Recooty discovers `pilot_default` / `pilot_v1` through the unchanged capabilities API; no vendor-specific ATS code is needed. Refresh after the one-minute capability cache expires.
+In Recooty, the panel is visible only to teams whose plan grants `BETA_FEATURES` (the former team allowlist was removed). For a live-pilot account set `INTERVIEW_SERVICE_SANDBOX=false` so its screen and optional invitation accurately describe an actual interview, rather than synthetic data. Keep `INTERVIEW_SERVICE_ALLOW_INVITATIONS=false` until an internal delivery test is authorized. This flag change does not enable customer billing. Recooty discovers `pilot_default` / `pilot_v1` through the unchanged capabilities API; no vendor-specific ATS code is needed. Refresh after the one-minute capability cache expires.
 
 Use a trusted HTTPS service origin. Open a newly generated link, continue, read the audio/transcript disclosure, and explicitly consent. The candidate page obtains microphone permission and submits only an SDP offer plus consent version. It receives an SDP answer only after the worker connects its authenticated sideband observer. Provider session IDs, API credentials, controls, transcript submission, usage submission and report generation are not exposed to this page. Stop and mute controls remain available; consent and its timestamp are stored on the attempt.
 
@@ -162,3 +164,7 @@ The local report-delivery slice reuses the completed CloudTech pilot. Authentica
 Recooty requires its additive `2026_09_18_171835_create_ai_interview_usage_inbox_table.php` migration before running the updated worker. It durably receives encrypted usage pages before advancing its cursor, then imports records separately. `interviews:reconcile` reports unresolved inbox records; inspect their `last_error` and reconcile ownership before taking action. `mapping_pending` can resolve after a missing interview/attempt mapping syncs; `usage_validation_failed` requires checking identity, quantities and charge policy. Unmapped service-only records must never be assigned to unrelated applications. Existing settled usage remains deduplicated.
 
 Local reconciliation imported all eight mapped records and retained the one service-only manual test as pending review. The candidate page and provider path were not changed by this recovery work. See section 16 of `AI_INTERVIEW_INTEGRATION_PLAN.md` for exact acceptance evidence and remaining gates.
+
+## Billable seconds
+
+Customer billing is off unless the Recooty (or other client) account ID is listed in `INTERVIEW_BILLABLE_ACCOUNT_IDS`. For listed accounts, settlements carry `billable_quantity` equal to the measured seconds for `completed` and employer-`cancelled` attempts, capped at the configured duration, with `rate_card_version` `seconds_v1`. `interrupted` and `failed` attempts, the synthetic provider and deleted interviews settle zero billable seconds. The service adds no balance or allowance of its own; the client enforces it. Recooty holds and consumes its `AI_INTERVIEW_SECONDS` plan feature behind `INTERVIEW_SERVICE_BILLING=true`, which requires `INTERVIEW_SERVICE_SANDBOX=false` because Recooty rejects nonzero charges in sandbox mode.

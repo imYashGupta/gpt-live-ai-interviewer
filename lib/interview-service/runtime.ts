@@ -18,5 +18,6 @@ export function serviceRuntime(): InterviewService {
   instance = new InterviewService(createServicePool(url),Buffer.from(key,"hex"),origin,liveConfigured ? {
     accountIds,provider:new OpenAILiveProvider(apiKey!),assessor:new OpenAILiveAssessor(apiKey!),
   } : undefined);
+  instance.billableAccountIds = (process.env.INTERVIEW_BILLABLE_ACCOUNT_IDS ?? "").split(",").map(s=>s.trim()).filter(Boolean);
   return instance;
 }

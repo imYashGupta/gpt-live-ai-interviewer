@@ -53,7 +53,7 @@ Schemas and example requests live under `contracts/interview-service/v1`. The sc
 
 Open the returned `/join#...` link and click **Continue** to exchange it for a single-interview session. GET requests never redeem a token. The fragment is removed from browser history and is never submitted as a URL query. Click **Run synthetic test** to create one durable attempt. Refresh status after the worker runs. Closing the tab does not stop the queued test. A lost browser session after redemption requires a new link while the interview is unstarted; automatic cross-device session recovery is not implemented.
 
-The default workspace sandbox allowance is 36,000 measured seconds and five concurrent attempts. Admission reserves the configured duration. These are operational test quotas, independent of monetary credit grants or Recooty subscriptions. The sandbox produces ten synthetic measured seconds when completed; its billable quantity is always zero. Cancelled started attempts persist measured progress with zero billing. Unstarted cancellations/expirations create no usage record.
+Workspaces are unlimited by default (`allowance_seconds` is NULL) and allow 25 concurrent attempts; migration 004 converted the former 36,000-second / five-attempt defaults. An operator can still set a cap on a workspace. Admission reserves the configured duration. The concurrency cap is runaway-cost protection, independent of monetary credit grants or Recooty subscriptions, which the client enforces itself. The sandbox produces ten synthetic measured seconds when completed; its billable quantity is always zero. Cancelled started attempts persist measured progress with zero billing. Unstarted cancellations/expirations create no usage record.
 
 ## Operator commands
 
@@ -168,3 +168,7 @@ Local reconciliation imported all eight mapped records and retained the one serv
 ## Billable seconds
 
 Customer billing is off unless the Recooty (or other client) account ID is listed in `INTERVIEW_BILLABLE_ACCOUNT_IDS`. For listed accounts, settlements carry `billable_quantity` equal to the measured seconds for `completed` and employer-`cancelled` attempts, capped at the configured duration, with `rate_card_version` `seconds_v1`. `interrupted` and `failed` attempts, the synthetic provider and deleted interviews settle zero billable seconds. The service adds no balance or allowance of its own; the client enforces it. Recooty holds and consumes its `AI_INTERVIEW_SECONDS` plan feature behind `INTERVIEW_SERVICE_BILLING=true`, which requires `INTERVIEW_SERVICE_SANDBOX=false` because Recooty rejects nonzero charges in sandbox mode.
+
+## Provisioning a client
+
+`npm run service:provision -- Recooty .data/recooty-credential.json` creates the client account, an account-level credential and the client's single workspace, and writes `accountId`, `token` and `clientWorkspaceId` to the private file. Configure the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`). The service does not track the client's own teams or customers.

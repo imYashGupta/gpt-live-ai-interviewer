@@ -124,6 +124,11 @@ test('PostgreSQL service integration on configured server', {skip:!connection}, 
       const ws2=await makeWorkspace(); await pool.query('UPDATE service_workspaces SET allowance_seconds=59 WHERE id=$1',[ws2.id]);
       const c=await invited(ws2.id); const sc=await exchangeInvitation(service,c.token);
       await assert.rejects(startCandidate(service,sc.token),e=>e.code==='quota_exceeded');
+      const open=await makeWorkspace();
+      const defaults=(await pool.query('SELECT allowance_seconds,concurrency_limit FROM service_workspaces WHERE id=$1',[open.id])).rows[0];
+      assert.equal(defaults.allowance_seconds,null); assert.equal(defaults.concurrency_limit,25);
+      assert.equal((await service.balance(p,open.id)).unlimited,true);
+      const d=await invited(open.id); assert.ok((await startCandidate(service,(await exchangeInvitation(service,d.token)).token)).attempt_id);
     });
     await t.test('future/expired windows cannot start or mint usable links',async()=>{
       const input=request(); input.availability.opens_at=new Date(Date.now()+60000).toISOString();

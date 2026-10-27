@@ -19,14 +19,23 @@ try {
     await migrateService(pool); console.log("Interview service migrations applied.");
   } else if (command === "provision") {
     const [name,output] = args;
-    if (!name || !output) throw new Error("Usage: npm run service:provision -- recooty_staging .data/recooty_staging-credential.json");
-    const file = resolve(output); await mkdir(resolve(file,".."),{recursive:true,mode:0o700});
-    // Exclusive creation inside transaction prevents accidentally overwriting a credential.
-    await transaction(pool,async db => {
-      const client = await createClient(db,name);
-      await writeFile(file,JSON.stringify(client,null,2)+"\n",{mode:0o600,flag:"wx"});
-    });
-    console.log(`Client ${name} created. Credential, account ID and workspace ID saved to the requested private file; the credential expires in 90 days.`);
+    if (!name) throw new Error("Usage: npm run service:provision -- recooty_staging [OUTPUT_FILE]");
+    if (!output) {
+      // No file: show the credential once. It is stored only as a hash and cannot be shown again.
+      const client = await transaction(pool,db => createClient(db,name));
+      console.log(`Client ${name} created. Copy these values now; the credential cannot be shown again and expires in 90 days.\n`);
+      console.log(`INTERVIEW_SERVICE_ACCOUNT_ID=${client.accountId}`);
+      console.log(`INTERVIEW_SERVICE_WORKSPACE_ID=${client.clientWorkspaceId}`);
+      console.log(`INTERVIEW_SERVICE_CREDENTIAL=${client.token}`);
+    } else {
+      const file = resolve(output); await mkdir(resolve(file,".."),{recursive:true,mode:0o700});
+      // Exclusive creation inside transaction prevents accidentally overwriting a credential.
+      await transaction(pool,async db => {
+        const client = await createClient(db,name);
+        await writeFile(file,JSON.stringify(client,null,2)+"\n",{mode:0o600,flag:"wx"});
+      });
+      console.log(`Client ${name} created. Credential, account ID and workspace ID saved to the requested private file; the credential expires in 90 days.`);
+    }
   } else if (command === "clients") {
     const rows = await clientUsage(pool,args[0]);
     const minutes = seconds => (seconds/60).toFixed(1);

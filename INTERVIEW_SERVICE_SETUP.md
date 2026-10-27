@@ -173,10 +173,10 @@ Every client receives billable seconds; whether to charge its own customers is t
 Create one client per consuming environment, for example `recooty`, `recooty_staging` and `recooty_dev`, so their usage is reported separately:
 
 ```sh
-npm run service:provision -- recooty_staging .data/recooty_staging-credential.json
+npm run service:provision -- recooty_staging
 ```
 
-This creates the client account, an account-level credential and the client's single workspace, and writes `accountId`, `token` and `clientWorkspaceId` to the private file (never overwriting an existing one). Configure that environment of the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`), then delete the file. Names are lowercase letters, digits and underscores and must be unique. The service does not track the client's own teams or customers.
+This creates the client account, an account-level credential and the client's single workspace, and prints them once as the three Recooty settings below. The credential is stored only as a hash and cannot be shown again; issue a new one with `credential` if it is lost. To write them to a private file instead (never overwriting an existing one), add a path: `npm run service:provision -- recooty_staging .data/recooty_staging-credential.json`. Configure that environment of the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`) and delete any credential file afterwards. Names are lowercase letters, digits and underscores and must be unique. The service does not track the client's own teams or customers.
 
 ```sh
 npm run service:clients            # interviews and measured/billable minutes per client, this month (UTC)

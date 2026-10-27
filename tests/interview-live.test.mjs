@@ -92,12 +92,11 @@ test("assessments reject fabricated evidence, absent evidence, duplicate metrics
 
 test("billable seconds charge exact used time and nothing for service failures", () => {
   const row = { execution_provider: "openai_live", deletion_requested_at: null, request: { configuration: { duration_limit_seconds: 300 } } };
-  assert.equal(billableSeconds(row, "completed", 7, true), 7);
-  assert.equal(billableSeconds(row, "cancelled", 125, true), 125);
-  assert.equal(billableSeconds(row, "completed", 304, true), 300);
-  assert.equal(billableSeconds(row, "interrupted", 120, true), 0);
-  assert.equal(billableSeconds(row, "failed", 120, true), 0);
-  assert.equal(billableSeconds(row, "completed", 120, false), 0);
-  assert.equal(billableSeconds({ ...row, execution_provider: "fake" }, "completed", 120, true), 0);
-  assert.equal(billableSeconds({ ...row, deletion_requested_at: new Date(), request: null }, "completed", 120, true), 0);
+  assert.equal(billableSeconds(row, "completed", 7), 7);
+  assert.equal(billableSeconds(row, "cancelled", 125), 125);
+  assert.equal(billableSeconds(row, "completed", 304), 300);
+  assert.equal(billableSeconds(row, "interrupted", 120), 0);
+  assert.equal(billableSeconds(row, "failed", 120), 0);
+  assert.equal(billableSeconds({ ...row, execution_provider: "fake" }, "completed", 120), 0);
+  assert.equal(billableSeconds({ ...row, deletion_requested_at: new Date(), request: null }, "completed", 120), 0);
 });

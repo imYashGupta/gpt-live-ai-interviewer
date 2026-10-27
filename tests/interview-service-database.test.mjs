@@ -9,6 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { createServicePool, migrateService, transaction } from '../lib/interview-service/postgres.ts';
 import { provisionAccount, authenticate, hashToken, newId, newToken } from '../lib/interview-service/security.ts';
 import { InterviewService } from '../lib/interview-service/service.ts';
+import { createClient, clientUsage, renameClient } from '../lib/interview-service/clients.ts';
 import { handleApi, handleCandidate } from '../lib/interview-service/http.ts';
 import { exchangeInvitation, startCandidate } from '../lib/interview-service/candidate.ts';
 import { claimJob, runClaimedJob, runWorkerOnce, expireInvitations } from '../lib/interview-service/worker.ts';
@@ -129,6 +130,24 @@ test('PostgreSQL service integration on configured server', {skip:!connection}, 
       assert.equal(defaults.allowance_seconds,null); assert.equal(defaults.concurrency_limit,25);
       assert.equal((await service.balance(p,open.id)).unlimited,true);
       const d=await invited(open.id); assert.ok((await startCandidate(service,(await exchangeInvitation(service,d.token)).token)).attempt_id);
+    });
+    await t.test('clients get one workspace, unique names and a per-client usage report',async()=>{
+      const staging=await transaction(pool,db=>createClient(db,'recooty_staging'));
+      const ws=(await pool.query('SELECT id,allowance_seconds FROM service_workspaces WHERE account_id=$1',[staging.accountId])).rows;
+      assert.deepEqual(ws.map(w=>w.id),[staging.clientWorkspaceId]); assert.equal(ws[0].allowance_seconds,null);
+      await assert.rejects(transaction(pool,db=>createClient(db,'Recooty_Staging')),/already exists|lowercase/);
+      await assert.rejects(transaction(pool,db=>createClient(db,'recooty_staging')),/already exists/);
+      await assert.rejects(transaction(pool,db=>createClient(db,'bad name')),/lowercase/);
+      const sp=await authenticate(pool,`Bearer ${staging.token}`);
+      const before=(await clientUsage(pool)).find(r=>r.client==='recooty_staging');
+      assert.equal(before.interviews_month,0); assert.equal(before.billable_seconds_month,0);
+      const input=request(); input.workspace_id=staging.clientWorkspaceId;
+      await service.createInterview(sp,input,newId('cmd'));
+      const after=(await clientUsage(pool)).find(r=>r.client==='recooty_staging');
+      assert.equal(after.interviews_month,1); assert.equal(after.interviews_total,1);
+      await renameClient(pool,staging.accountId,'recooty_stage');
+      assert.ok((await clientUsage(pool)).some(r=>r.client==='recooty_stage'));
+      assert.equal((await clientUsage(pool,'2000-01')).find(r=>r.client==='recooty_stage').interviews_month,0);
     });
     await t.test('future/expired windows cannot start or mint usable links',async()=>{
       const input=request(); input.availability.opens_at=new Date(Date.now()+60000).toISOString();

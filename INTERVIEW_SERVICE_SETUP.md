@@ -101,11 +101,10 @@ Keep these settings identical in API and worker processes:
 
 ```dotenv
 INTERVIEW_LIVE_ENABLED=true
-INTERVIEW_LIVE_ACCOUNT_IDS=acct_internal_pilot
 INTERVIEW_WORKER_CONCURRENCY=4
 ```
 
-Set `OPENAI_API_KEY` server-side. Do not reuse the example account ID; allowlist the explicitly selected internal service account. The code still uses the existing test credential namespace and test account environment for this unbilled integration pilot; full production/test account separation remains a rollout prerequisite. `INTERVIEW_LIVE_ENABLED` defaults to false. The local Recooty service account is now enabled for the CloudTech internal pilot; other installations remain opt-in.
+Set `OPENAI_API_KEY` server-side. `INTERVIEW_LIVE_ENABLED` defaults to false; when true, every client account gets real interviews (there is no per-account allowlist). To stop one client, disable its account. Turning the flag off refuses new live starts while existing sessions are still stopped and recovered.
 
 In Recooty, the panel is visible only to teams whose plan grants `BETA_FEATURES` (the former team allowlist was removed). For a live-pilot account set `INTERVIEW_SERVICE_SANDBOX=false` so its screen and optional invitation accurately describe an actual interview, rather than synthetic data. Keep `INTERVIEW_SERVICE_ALLOW_INVITATIONS=false` until an internal delivery test is authorized. This flag change does not enable customer billing. Recooty discovers `pilot_default` / `pilot_v1` through the unchanged capabilities API; no vendor-specific ATS code is needed. Refresh after the one-minute capability cache expires.
 
@@ -167,8 +166,20 @@ Local reconciliation imported all eight mapped records and retained the one serv
 
 ## Billable seconds
 
-Customer billing is off unless the Recooty (or other client) account ID is listed in `INTERVIEW_BILLABLE_ACCOUNT_IDS`. For listed accounts, settlements carry `billable_quantity` equal to the measured seconds for `completed` and employer-`cancelled` attempts, capped at the configured duration, with `rate_card_version` `seconds_v1`. `interrupted` and `failed` attempts, the synthetic provider and deleted interviews settle zero billable seconds. The service adds no balance or allowance of its own; the client enforces it. Recooty holds and consumes its `AI_INTERVIEW_SECONDS` plan feature behind `INTERVIEW_SERVICE_BILLING=true`, which requires `INTERVIEW_SERVICE_SANDBOX=false` because Recooty rejects nonzero charges in sandbox mode.
+Every client receives billable seconds; whether to charge its own customers is the client's decision. Settlements carry `billable_quantity` equal to the measured seconds for `completed` and employer-`cancelled` attempts, capped at the configured duration, with `rate_card_version` `seconds_v1`. `interrupted` and `failed` attempts, the synthetic provider and deleted interviews settle zero billable seconds. The service adds no balance or allowance of its own; the client enforces it. Recooty holds and consumes its `AI_INTERVIEW_SECONDS` plan feature behind `INTERVIEW_SERVICE_BILLING=true`, which requires `INTERVIEW_SERVICE_SANDBOX=false` because Recooty rejects nonzero charges in sandbox mode.
 
 ## Provisioning a client
 
-`npm run service:provision -- Recooty .data/recooty-credential.json` creates the client account, an account-level credential and the client's single workspace, and writes `accountId`, `token` and `clientWorkspaceId` to the private file. Configure the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`). The service does not track the client's own teams or customers.
+Create one client per consuming environment, for example `recooty`, `recooty_staging` and `recooty_dev`, so their usage is reported separately:
+
+```sh
+npm run service:provision -- recooty_staging .data/recooty_staging-credential.json
+```
+
+This creates the client account, an account-level credential and the client's single workspace, and writes `accountId`, `token` and `clientWorkspaceId` to the private file (never overwriting an existing one). Configure that environment of the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`), then delete the file. Names are lowercase letters, digits and underscores and must be unique. The service does not track the client's own teams or customers.
+
+```sh
+npm run service:clients            # interviews and measured/billable minutes per client, this month (UTC)
+npm run service:clients -- 2026-09 # a given month
+npm run service:rename -- acct_... recooty_dev
+```

@@ -40,10 +40,13 @@ export async function emitEvent(db: PoolClient, row: InterviewRow, type: string,
   return event;
 }
 
-/** Billing policy lives here because only the service observes the outcome: service-side failures bill nothing. */
-export function billableSeconds(row: InterviewRow, outcome: string, measured: number, billed: boolean) {
+/**
+ * Billing policy lives here because only the service observes the outcome: service-side failures bill nothing.
+ * Every client receives billable seconds; whether to charge its own customers is the client's decision.
+ */
+export function billableSeconds(row: InterviewRow, outcome: string, measured: number) {
   // Deletion erases the request, and the client discards usage for deleted interviews.
-  if (!billed || row.deletion_requested_at || row.execution_provider === "fake" || !["completed","cancelled"].includes(outcome)) return 0;
+  if (row.deletion_requested_at || row.execution_provider === "fake" || !["completed","cancelled"].includes(outcome)) return 0;
   return Math.min(measured,row.request.configuration.duration_limit_seconds);
 }
 export async function recordShadowUsage(db: PoolClient,row: InterviewRow,attemptId: string,measured: number,billable = 0) {
@@ -76,12 +79,9 @@ export class InterviewService {
     if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash || url.pathname !== "/") throw new Error("Service origin must be an HTTPS origin");
     this.pool = pool; this.key = encryptionKey; this.origin = url.origin;
   }
-  /** Accounts whose settlements carry billable seconds. This is not an allowance; the client enforces its own balance. */
-  billableAccountIds: string[] = [];
-  liveEnabled(accountId: string) { return this.live?.accountIds.includes(accountId) === true; }
-  billed(accountId: string) { return this.billableAccountIds.includes(accountId); }
-  capabilities(accountId: string) {
-    return this.liveEnabled(accountId) ? { ...capabilities, interviewer_profile_ids: ["pilot_default"], rubric_version_ids: ["pilot_v1"] } : capabilities;
+  liveEnabled() { return this.live?.enabled === true; }
+  capabilities() {
+    return this.liveEnabled() ? { ...capabilities, interviewer_profile_ids: ["pilot_default"], rubric_version_ids: ["pilot_v1"] } : capabilities;
   }
   async principal(header: string | null) { return authenticate(this.pool,header); }
 
@@ -144,11 +144,11 @@ export class InterviewService {
       const tombstone = await db.query("SELECT id FROM service_interviews WHERE workspace_id=$1 AND external_reference_hash=$2 AND deletion_requested_at IS NOT NULL",[input.workspace_id,hashToken(input.external_reference)]);
       if (tombstone.rowCount) throw new ServiceError(410,"interview_deleted");
       const c = input.configuration;
-      const caps = this.capabilities(p.accountId);
+      const caps = this.capabilities();
       if (c.mode !== "adaptive" || c.language !== "en" || !caps.interviewer_profile_ids.includes(c.interviewer_profile_id) || !caps.rubric_version_ids.includes(c.rubric_version_id)) throw new ServiceError(422,"unsupported_configuration");
       if (Date.parse(input.availability.last_start_at) <= Date.now()) throw new ServiceError(422,"validation_failed","Start window has expired");
       const result = await db.query<InterviewRow>(`INSERT INTO service_interviews(id,account_id,workspace_id,external_reference,request,execution_provider,external_reference_hash)
-        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input,this.liveEnabled(p.accountId) ? "openai_live" : "fake",hashToken(input.external_reference)]);
+        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING *`,[newId("int"),p.accountId,input.workspace_id,input.external_reference,input,this.liveEnabled() ? "openai_live" : "fake",hashToken(input.external_reference)]);
       if (!result.rowCount) throw new ServiceError(409,"external_reference_conflict");
       return interviewView(result.rows[0]);
     });

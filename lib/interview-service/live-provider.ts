@@ -41,7 +41,8 @@ export interface LiveAssessor {
   ): Promise<Assessment>;
 }
 export interface LiveOptions {
-  accountIds: string[];
+  /** New live starts are allowed. The adapter stays available to stop and recover existing sessions when false. */
+  enabled: boolean;
   provider: LiveProvider;
   assessor: LiveAssessor;
 }

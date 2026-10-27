@@ -17,7 +17,7 @@ test('durable deletion on disposable Herd fixtures', {skip:!url},async t=>{
     const key=randomBytes(32), account=await transaction(pool,db=>provisionAccount(db,'Synthetic deletion'));
     const p=await authenticate(pool,`Bearer ${account.token}`), stranger={...p,accountId:'acct_other'};
     let creates=0,hangups=0,failStop=false,duringCreate=async()=>{}, duringAssess=async()=>{}, events=[];
-    const live={accountIds:[p.accountId],provider:{
+    const live={enabled:true,provider:{
       async create(){creates++; await duringCreate(); return {reference:'private_'+newId('call'),answer:'private-answer'};},
       attach(){return {ready:Promise.resolve(),updateTimeRemaining(){},stop(){events.push({id:'closed',kind:'execution.closed',cumulativeAudioMs:12000,outcome:'completed'});},close(){},async next(){return events.shift() ?? {id:'closed',kind:'execution.closed',cumulativeAudioMs:12000,outcome:'completed'};}};},
       async hangup(){hangups++; if(failStop)throw new Error('mock outage');}
@@ -25,7 +25,7 @@ test('durable deletion on disposable Herd fixtures', {skip:!url},async t=>{
     const service=new InterviewService(pool,key,'https://interviewer.test',live);
     const ws=await service.createWorkspace(p,{external_reference:newId('team'),display_name:'Synthetic'},newId('cmd'));
     async function fixture(start=false,fake=false){
-      service.live.accountIds=fake?[]:[p.accountId];
+      service.live.enabled=!fake;
       const now=Date.now(),last=new Date(now+120000).toISOString(),command=newId('cmd');
       const input={workspace_id:ws.id,external_reference:newId('external'),candidate:{external_id:'private-person-id',display_name:'Private Candidate'},job:{external_id:'private-job-id',title:'Engineer',description:'Private context'},configuration:{mode:'adaptive',modality:'audio',language:'en',duration_limit_seconds:60,difficulty:'mid',follow_ups_enabled:true,interviewer_profile_id:fake?'sandbox_default':'pilot_default',rubric_version_id:fake?'sandbox_v1':'pilot_v1'},availability:{kind:'window',opens_at:new Date(now-1000).toISOString(),last_start_at:last,must_finish_at:new Date(now+240000).toISOString(),display_timezone:'UTC'},authorization_budget:{external_reservation_id:newId('hold'),metric:'interview_seconds',max_quantity:60,start_before:last}};
       const row=await service.createInterview(p,input,command),linkKey=newId('cmd');

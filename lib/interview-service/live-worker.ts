@@ -159,7 +159,7 @@ async function finalize(
         updated,
         attempt.id,
         measured,
-        billableSeconds(updated, outcome, measured, service.billed(row.account_id))
+        billableSeconds(updated, outcome, measured)
       );
     }
     // Unknown final usage stays provisional and keeps its quota reservation for operator reconciliation.
@@ -209,7 +209,7 @@ export async function executeLive(service: InterviewService, job: Job) {
         row.deletion_requested_at ||
         attempt.stop_requested_at ||
         Date.now() >= attempt.deadline_at.getTime() ||
-        !service.liveEnabled(row.account_id)
+        !service.liveEnabled()
       ) {
         await checkpoint(service, job, {
           id: "never_started",
@@ -295,13 +295,13 @@ export async function executeLive(service: InterviewService, job: Job) {
         (current.stop_requested_at ||
           current.disabled_at ||
           Date.now() >= current.deadline_at.getTime() ||
-          !service.liveEnabled(row.account_id))
+          !service.liveEnabled())
       ) {
         await transaction(service.pool, async (db) => {
           if (!(await ownsLease(db, job))) throw new Error("Live worker lease lost");
           await db.query(
             "UPDATE service_attempts SET stop_requested_at=coalesce(stop_requested_at,now()),stop_reason=coalesce(stop_reason,$2) WHERE id=$1",
-            [attempt.id, current.disabled_at || !service.liveEnabled(row.account_id)
+            [attempt.id, current.disabled_at || !service.liveEnabled()
               ? "service_disabled" : "duration_limit"],
           );
         });

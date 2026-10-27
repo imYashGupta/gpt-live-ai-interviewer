@@ -108,7 +108,7 @@ test(
         },
       };
       const service = new InterviewService(pool, key, origin, {
-        accountIds: [p.accountId],
+        enabled: true,
         provider,
         assessor,
       });
@@ -222,10 +222,10 @@ test(
         "admission requires consent; account routing and retries cannot mint a second session",
         async () => {
           const x = await invite();
-          assert.deepEqual(
-            service.capabilities("other").interviewer_profile_ids,
-            ["sandbox_default"]
-          );
+          service.live.enabled = false;
+          assert.deepEqual(service.capabilities().interviewer_profile_ids, ["sandbox_default"]);
+          service.live.enabled = true;
+          assert.deepEqual(service.capabilities().interviewer_profile_ids, ["pilot_default"]);
           await assert.rejects(
             startCandidate(service, x.session.token),
             (e) => e.code === "consent_and_offer_required"
@@ -288,7 +288,7 @@ test(
           assert.equal(result.transcript[1].text, fullEvents()[1].text);
           const usage = await service.usage(p, x.input.workspace_id, null);
           assert.equal(usage.data.length, 1);
-          assert.equal(usage.data[0].billable_quantity, 0);
+          assert.equal(usage.data[0].billable_quantity, 12);
           assert.equal(usage.data[0].measured_quantity, 12);
           assert.equal(
             (await service.readInterview(p, x.interview.id)).execution_status,
@@ -331,10 +331,9 @@ test(
         }
       );
       await t.test(
-        "billable accounts settle exact used seconds; service failures settle nothing billable",
+        "live interviews settle exact used seconds; service failures settle nothing billable",
         async () => {
-          service.billableAccountIds = [p.accountId];
-          try {
+          {
             const x = await invite();
             await startCandidate(service, x.session.token, offer);
             events = fullEvents();
@@ -353,8 +352,6 @@ test(
             assert.equal(failed.data.length, 1);
             assert.equal(failed.data[0].measured_quantity, 12);
             assert.equal(failed.data[0].billable_quantity, 0);
-          } finally {
-            service.billableAccountIds = [];
           }
         }
       );
@@ -602,7 +599,7 @@ test(
         "rollback keeps create replay stable and blocks new live starts",
         async () => {
           const x = await invite();
-          service.live.accountIds = [];
+          service.live.enabled = false;
           assert.deepEqual(
             await service.createInterview(p, x.input, x.createKey),
             x.interview
@@ -611,7 +608,7 @@ test(
             startCandidate(service, x.session.token, offer),
             (e) => e.code === "live_pilot_disabled"
           );
-          service.live.accountIds = [p.accountId];
+          service.live.enabled = true;
         }
       );
       await t.test(

@@ -11,6 +11,8 @@
     "test:contracts": "node --test tests/interview-service-contract.test.mjs tests/interview-provider.test.mjs",
     "service:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs migrate",
     "service:provision": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs provision",
+    "service:clients": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs clients",
+    "service:rename": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs rename",
     "service:worker": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs worker",
     "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs tests/interview-deletion-database.test.mjs"
   },

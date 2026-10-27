@@ -57,7 +57,7 @@ export async function startCandidate(service: InterviewService, token: string | 
     // Repeated start/reconnect returns the original attempt, even after completion.
     if (row.attempt_id && ["in_progress","completed","interrupted","failed"].includes(row.execution_status)) return candidateView(row);
     if (row.execution_status !== "ready") throw new ServiceError(409,"invalid_state");
-    if (live && !service.liveEnabled(row.account_id)) throw new ServiceError(503,"live_pilot_disabled");
+    if (live && !service.liveEnabled()) throw new ServiceError(503,"live_pilot_disabled");
     const now = Date.now(), w = row.request.availability;
     if (now < Date.parse(w.opens_at)) throw new ServiceError(409,"interview_not_open");
     if (now >= Math.min(Date.parse(w.last_start_at),Date.parse(row.request.authorization_budget.start_before))) throw new ServiceError(410,"interview_expired");

@@ -2,7 +2,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { createServicePool, migrateService, transaction } from "../lib/interview-service/postgres.ts";
-import { provisionAccount, issueCredential, assertId, newId } from "../lib/interview-service/security.ts";
+import { issueCredential, assertId } from "../lib/interview-service/security.ts";
+import { createClient, renameClient, clientUsage, monthRange } from "../lib/interview-service/clients.ts";
 import { serviceRuntime } from "../lib/interview-service/runtime.ts";
 import { destination, webhookTransport } from "../lib/interview-service/delivery.ts";
 import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
@@ -18,17 +19,35 @@ try {
     await migrateService(pool); console.log("Interview service migrations applied.");
   } else if (command === "provision") {
     const [name,output] = args;
-    if (!name || !output) throw new Error("Usage: npm run service:provision -- Recooty .data/recooty-credential.json");
-    const file = resolve(output); await mkdir(resolve(file,".."),{recursive:true,mode:0o700});
-    // Exclusive creation inside transaction prevents accidentally overwriting a credential.
-    await transaction(pool,async db => {
-      const account = await provisionAccount(db,name);
-      // A client gets one workspace; how it divides usage among its own customers is its concern.
-      const workspaceId = newId("ws");
-      await db.query("INSERT INTO service_workspaces(id,account_id,external_reference,display_name) VALUES ($1,$2,$3,$4)",[workspaceId,account.accountId,"default",name]);
-      await writeFile(file,JSON.stringify({ ...account, clientWorkspaceId: workspaceId },null,2)+"\n",{mode:0o600,flag:"wx"});
-    });
-    console.log("Client account and workspace created. Credential, account ID and workspace ID saved to the requested private file; the credential expires in 90 days.");
+    if (!name) throw new Error("Usage: npm run service:provision -- recooty_staging [OUTPUT_FILE]");
+    if (!output) {
+      // No file: show the credential once. It is stored only as a hash and cannot be shown again.
+      const client = await transaction(pool,db => createClient(db,name));
+      console.log(`Client ${name} created. Copy these values now; the credential cannot be shown again and expires in 90 days.\n`);
+      console.log(`INTERVIEW_SERVICE_ACCOUNT_ID=${client.accountId}`);
+      console.log(`INTERVIEW_SERVICE_WORKSPACE_ID=${client.clientWorkspaceId}`);
+      console.log(`INTERVIEW_SERVICE_CREDENTIAL=${client.token}`);
+    } else {
+      const file = resolve(output); await mkdir(resolve(file,".."),{recursive:true,mode:0o700});
+      // Exclusive creation inside transaction prevents accidentally overwriting a credential.
+      await transaction(pool,async db => {
+        const client = await createClient(db,name);
+        await writeFile(file,JSON.stringify(client,null,2)+"\n",{mode:0o600,flag:"wx"});
+      });
+      console.log(`Client ${name} created. Credential, account ID and workspace ID saved to the requested private file; the credential expires in 90 days.`);
+    }
+  } else if (command === "clients") {
+    const rows = await clientUsage(pool,args[0]);
+    const minutes = seconds => (seconds/60).toFixed(1);
+    console.log(`Usage for ${monthRange(args[0]).month} (UTC)`);
+    console.table(rows.map(r => ({ client:r.client, account_id:r.account_id, disabled:r.disabled, interviews:r.interviews_month,
+      measured_min:minutes(r.measured_seconds_month), billable_min:minutes(r.billable_seconds_month),
+      interviews_total:r.interviews_total, billable_min_total:minutes(r.billable_seconds_total) })));
+  } else if (command === "rename") {
+    const [accountId,name] = args;
+    if (!accountId || !name) throw new Error("Usage: rename ACCOUNT_ID NEW_NAME");
+    await renameClient(pool,assertId(accountId),name);
+    console.log(`Client renamed to ${name}.`);
   } else if (command === "credential") {
     const [accountId,output,workspaceId] = args;
     if (!accountId || !output) throw new Error("Usage: credential ACCOUNT_ID OUTPUT_FILE [WORKSPACE_ID]");
@@ -71,7 +90,7 @@ try {
     const service=serviceRuntime(); pool=service.pool;
     const transport=webhookTransport(webhookHosts,production);
     let stopping=false; process.on("SIGINT",()=>{stopping=true;}); process.on("SIGTERM",()=>{stopping=true;});
-    console.log("Interview worker started. Customer billing is disabled.");
+    console.log(`Interview worker started. Live interviews ${process.env.INTERVIEW_LIVE_ENABLED === "true" ? "enabled" : "disabled"}.`);
     if (args.includes("--once")) await runWorkerOnce(service,transport);
     else {
       const concurrency = Number(process.env.INTERVIEW_WORKER_CONCURRENCY ?? "4");

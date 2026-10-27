@@ -60,7 +60,7 @@ export async function handleApi(request: Request,service: InterviewService) {
     const p = await service.principal(request.headers.get("authorization"));
     const url = new URL(request.url), path = url.pathname, method = request.method;
     const key = request.headers.get("idempotency-key");
-    if (method === "GET" && path === "/v1/capabilities") return json(service.capabilities(p.accountId));
+    if (method === "GET" && path === "/v1/capabilities") return json(service.capabilities());
     if (method === "POST" && path === "/v1/workspaces") return json(await service.createWorkspace(p,await body(request) as Parameters<InterviewService["createWorkspace"]>[1],key),201);
     if (method === "POST" && path === "/v1/interviews") return json(await service.createInterview(p,await body(request) as InterviewRequest,key),201);
     if (method === "POST" && path === "/v1/webhook-endpoints") return json(await service.webhookEndpoint(p,await body(request) as Parameters<InterviewService["webhookEndpoint"]>[1],key),201);

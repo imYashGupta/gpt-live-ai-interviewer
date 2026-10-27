@@ -66,9 +66,12 @@ export async function startCandidate(service: InterviewService, token: string | 
     const ws = (await db.query("SELECT * FROM service_workspaces WHERE id=$1 FOR UPDATE",[row.workspace_id])).rows[0];
     const reserved = (await db.query(`SELECT count(*)::integer AS active,coalesce(sum(reserved_seconds),0)::text AS seconds
       FROM service_reservations WHERE workspace_id=$1 AND status='reserved'`,[row.workspace_id])).rows[0];
-    const used = (await db.query("SELECT coalesce(sum(measured_seconds),0)::text AS seconds FROM service_usage WHERE workspace_id=$1",[row.workspace_id])).rows[0];
     if (reserved.active >= ws.concurrency_limit) throw new ServiceError(409,"concurrency_limit");
-    if (BigInt(reserved.seconds)+BigInt(used.seconds)+BigInt(seconds) > BigInt(ws.allowance_seconds)) throw new ServiceError(409,"quota_exceeded");
+    // A null allowance is unlimited: the client enforces its own customer balance.
+    if (ws.allowance_seconds !== null) {
+      const used = (await db.query("SELECT coalesce(sum(measured_seconds),0)::text AS seconds FROM service_usage WHERE workspace_id=$1",[row.workspace_id])).rows[0];
+      if (BigInt(reserved.seconds)+BigInt(used.seconds)+BigInt(seconds) > BigInt(ws.allowance_seconds)) throw new ServiceError(409,"quota_exceeded");
+    }
     const attempt = newId("att");
     await db.query("INSERT INTO service_attempts(id,interview_id,provider,provider_reference,deadline_at,offer_hash,offer_ciphertext,consent_version,consent_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
       [attempt,row.id,row.execution_provider,newId("pending"),new Date(now+seconds*1000),live ? hashToken(input.sdp!) : null,live ? seal(input.sdp!,service.key) : null,live ? input.consent_version : null,live ? new Date(now) : null]);

@@ -2,7 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { createServicePool, migrateService, transaction } from "../lib/interview-service/postgres.ts";
-import { provisionAccount, issueCredential, assertId } from "../lib/interview-service/security.ts";
+import { provisionAccount, issueCredential, assertId, newId } from "../lib/interview-service/security.ts";
 import { serviceRuntime } from "../lib/interview-service/runtime.ts";
 import { destination, webhookTransport } from "../lib/interview-service/delivery.ts";
 import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
@@ -18,14 +18,17 @@ try {
     await migrateService(pool); console.log("Interview service migrations applied.");
   } else if (command === "provision") {
     const [name,output] = args;
-    if (!name || !output) throw new Error("Usage: npm run service:provision -- Recooty .data/recooty-test-credential.json");
+    if (!name || !output) throw new Error("Usage: npm run service:provision -- Recooty .data/recooty-credential.json");
     const file = resolve(output); await mkdir(resolve(file,".."),{recursive:true,mode:0o700});
     // Exclusive creation inside transaction prevents accidentally overwriting a credential.
     await transaction(pool,async db => {
       const account = await provisionAccount(db,name);
-      await writeFile(file,JSON.stringify(account,null,2)+"\n",{mode:0o600,flag:"wx"});
+      // A client gets one workspace; how it divides usage among its own customers is its concern.
+      const workspaceId = newId("ws");
+      await db.query("INSERT INTO service_workspaces(id,account_id,external_reference,display_name) VALUES ($1,$2,$3,$4)",[workspaceId,account.accountId,"default",name]);
+      await writeFile(file,JSON.stringify({ ...account, clientWorkspaceId: workspaceId },null,2)+"\n",{mode:0o600,flag:"wx"});
     });
-    console.log("Test account created. Credential saved to the requested private file; expires in 90 days.");
+    console.log("Client account and workspace created. Credential, account ID and workspace ID saved to the requested private file; the credential expires in 90 days.");
   } else if (command === "credential") {
     const [accountId,output,workspaceId] = args;
     if (!accountId || !output) throw new Error("Usage: credential ACCOUNT_ID OUTPUT_FILE [WORKSPACE_ID]");

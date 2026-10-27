@@ -214,8 +214,8 @@ export class InterviewService {
     return { data: rows.slice(0,100).map(r => r.record), next_cursor: rows.length > 100 ? String(rows[99].sequence) : null };
   }
   async balance(p: Principal, workspaceId: string) {
-    requireScope(p,"usage:read"); await workspace(this.pool,p,workspaceId);
-    return { workspace_id: workspaceId, available_credits:"0.000000",reserved_credits:"0.000000",unlimited:false,as_of:new Date().toISOString() };
+    requireScope(p,"usage:read"); const ws = await workspace(this.pool,p,workspaceId);
+    return { workspace_id: workspaceId, available_credits:"0.000000",reserved_credits:"0.000000",unlimited:ws.allowance_seconds === null,as_of:new Date().toISOString() };
   }
   async webhookEndpoint(p: Principal,input: {url: string; event_types: string[]},key: string | null) {
     requireScope(p,"webhooks:write"); if (p.workspaceId) throw new ServiceError(403,"forbidden");

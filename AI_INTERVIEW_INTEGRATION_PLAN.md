@@ -522,3 +522,11 @@ Decided with the product owner: the interview service has one client (Recooty) a
 
 - `INTERVIEW_LIVE_ACCOUNT_IDS` and `INTERVIEW_BILLABLE_ACCOUNT_IDS` were removed. `INTERVIEW_LIVE_ENABLED=true` makes every client live; billable seconds are always reported for live interviews (completed and employer-cancelled attempts; failures, synthetic and deleted interviews are zero). Recooty decides whether to charge with `INTERVIEW_SERVICE_BILLING`.
 - Each consuming environment is its own named client (`recooty`, `recooty_staging`, `recooty_dev`) with its own credential and workspace, so usage is tracked per environment. Migration 005 makes client names unique (case-insensitive). Clients are managed from the CLI only (`service:provision`, `service:clients`, `service:rename`); no admin UI was added.
+
+## 22. Access through AI_INTERVIEW_SECONDS — 2026-10-28
+
+The AI interviews tab is granted by holding `AI_INTERVIEW_SECONDS` through the plan or a feature ticket, even with zero seconds (the same pattern as `AI_ASSISTANT_MESSAGES` for the assistant). This replaces the `BETA_FEATURES` gate and the removed `INTERVIEW_SERVICE_ENABLED` switch. An environment without the service connection settings shows no tab.
+
+## 23. AI_INTERVIEW_SECONDS is a quota (no reset) — 2026-10-28
+
+Supersedes the monthly reset in section 19. `AI_INTERVIEW_SECONDS` is a Soulbscription quota feature (consumable + quota, no periodicity): a plan grants a pool of seconds, add-ons raise it with never-expiring tickets, and settled seconds stay spent. No migration creates or converts it: admins create `AI_INTERVIEW_SECONDS` in Next-Admin as a Quota feature in each environment, then attach it to plans (charges in seconds, 0 allowed) or give tickets. Refund adjustments raise the quota with a recurring ticket.

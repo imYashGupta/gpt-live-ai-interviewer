@@ -7,6 +7,7 @@ import { createClient, renameClient, clientUsage, monthRange, registerWebhook } 
 import { serviceRuntime } from "../lib/interview-service/runtime.ts";
 import { destination, webhookTransport } from "../lib/interview-service/delivery.ts";
 import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
+import { attemptPrefix, chunkKey, recordingStorage } from "../lib/interview-service/recording-storage.ts";
 
 const [command,...args] = process.argv.slice(2);
 const webhookHosts=(process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean);
@@ -28,11 +29,68 @@ function encryptionKey() {
   if (!/^[a-f0-9]{64}$/i.test(key)) throw new Error("Set INTERVIEW_SERVICE_ENCRYPTION_KEY (64 hex characters), the same value the app and worker use");
   return Buffer.from(key,"hex");
 }
+/** Round trip through the same presigned links the browser and report use, then removes the test object. */
+async function recordingCheck() {
+  const storage = recordingStorage();
+  if (!storage) throw new Error("Set INTERVIEW_RECORDING_ENABLED=true and the INTERVIEW_RECORDING_S3_* settings first");
+  const { bucket, region, prefix } = storage.config;
+  const attempt = attemptPrefix(prefix,"acct_recording_check","int_recording_check",`att_${Date.now()}`);
+  const key = chunkKey(attempt,0,"video/webm");
+  const body = new TextEncoder().encode(`recording check ${new Date().toISOString()}`);
+  const step = async (name, work) => {
+    try { return await work(); }
+    catch (error) {
+      if (error?.constructor === Error && !error.$metadata) throw error;
+      // S3 errors carry a code and status but no credentials.
+      throw new Error(`${name} failed: ${error?.name ?? "error"}${error?.$metadata?.httpStatusCode ? ` (HTTP ${error.$metadata.httpStatusCode})` : ""}`);
+    }
+  };
+  console.log(`Checking bucket ${bucket} in ${region} under ${attempt}`);
+  const form = await step("Creating an upload link", () => storage.uploadForm(key,"video/webm"));
+  await step("Browser-style upload", async () => {
+    const data = new FormData();
+    for (const [name,value] of Object.entries(form.fields)) data.append(name,value);
+    data.append("file",new Blob([body],{type:"video/webm"}));
+    const response = await fetch(form.url,{method:"POST",body:data});
+    if (!response.ok) throw new Error(`Browser-style upload failed: HTTP ${response.status} ${(await response.text()).match(/<Code>(.*?)<\/Code>/)?.[1] ?? ""}`.trim());
+  });
+  console.log("Upload through presigned POST: ok");
+  const size = await step("Reading object size", () => storage.size(key));
+  if (size !== body.length) throw new Error(`Stored size ${size} does not match uploaded size ${body.length}`);
+  console.log("Object stored: ok");
+  const oversize = await step("Creating an upload link", () => storage.uploadForm(chunkKey(attempt,1,"video/webm"),"video/webm"));
+  const tooLarge = new FormData();
+  for (const [name,value] of Object.entries(oversize.fields)) tooLarge.append(name,value);
+  tooLarge.append("file",new Blob([new Uint8Array(storage.config.maxChunkBytes + 1)],{type:"video/webm"}));
+  // S3 may answer 400 EntityTooLarge or drop the connection; either way the upload is refused.
+  const refused = await fetch(oversize.url,{method:"POST",body:tooLarge}).catch(() => ({ ok:false }));
+  if (refused.ok) throw new Error("S3 accepted a chunk larger than INTERVIEW_RECORDING_MAX_CHUNK_BYTES");
+  console.log("Oversized upload refused by S3: ok");
+  const playback = await step("Playback", async () => {
+    const response = await fetch(await storage.playbackUrl(key));
+    if (!response.ok) throw new Error(`Playback failed: HTTP ${response.status}`);
+    return new Uint8Array(await response.arrayBuffer());
+  });
+  if (Buffer.compare(Buffer.from(playback),Buffer.from(body)) !== 0) throw new Error("Played back bytes differ from the upload");
+  console.log("Playback through presigned GET: ok");
+  if (!storage.config.endpoint) {
+    const anonymous = await fetch(`https://${bucket}.s3.${region}.amazonaws.com/${key}`);
+    if (anonymous.ok) throw new Error("The object is publicly readable; block public access on the bucket");
+    console.log("Public access blocked: ok");
+  }
+  const removed = await step("Deleting the test object", () => storage.deletePrefix(attempt));
+  if (await step("Confirming deletion", () => storage.size(key)) !== null) throw new Error("Test object still exists after deletion");
+  console.log(`Deleted ${removed} test object(s): ok\nRecording storage is ready.`);
+}
 let pool;
 try {
-  if (!process.env.INTERVIEW_DATABASE_URL) throw new Error("Set INTERVIEW_DATABASE_URL to your dedicated database on Herd's PostgreSQL server");
-  pool = createServicePool(process.env.INTERVIEW_DATABASE_URL);
-  if (command === "migrate") {
+  if (command !== "recording-check") {
+    if (!process.env.INTERVIEW_DATABASE_URL) throw new Error("Set INTERVIEW_DATABASE_URL to your dedicated database on Herd's PostgreSQL server");
+    pool = createServicePool(process.env.INTERVIEW_DATABASE_URL);
+  }
+  if (command === "recording-check") {
+    await recordingCheck();
+  } else if (command === "migrate") {
     await migrateService(pool); console.log("Interview service migrations applied.");
   } else if (command === "provision") {
     const hook = option("webhook");
@@ -147,7 +205,7 @@ try {
       // Graceful shutdown stops intake while active capture continues to its bounded deadline.
       await Promise.all(active);
     }
-  } else throw new Error("Command must be migrate, provision, webhook, credential, revoke, import-legacy, activate-webhook, jobs, attempts, replay, or worker");
+  } else throw new Error("Command must be recording-check, migrate, provision, webhook, credential, revoke, import-legacy, activate-webhook, jobs, attempts, replay, or worker");
 } catch(error) {
   // Database/transport exceptions can contain credentials. Only show known operator errors.
   console.error(error?.constructor === Error && !error.code ? error.message : "Operation failed. Check database connectivity and service configuration.");

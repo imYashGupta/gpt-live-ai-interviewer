@@ -197,3 +197,42 @@ It prints `INTERVIEW_SERVICE_WEBHOOK_SECRET` for that Recooty environment's `.en
 Other client commands: `npm run service:credential -- ACCOUNT_ID OUTPUT_FILE` issues a new credential, `npm run service:revoke -- key_...` revokes one.
 
 Troubleshooting: `npm run service:attempts` lists live attempts that are active or ended without final usage (`connection_state` `queued` = never started, `creating` = provider rejected the session, `created`/`observing` = dropped mid-session). `npm run service:jobs` lists unfinished and dead jobs with their last error; `npm run service:replay -- job_...` requeues a dead job after its cause is fixed. The worker log names the reason each live attempt was interrupted.
+
+## Video recording storage
+
+Recording is off unless `INTERVIEW_RECORDING_ENABLED=true`. The candidate's browser uploads chunks straight to a private
+S3 bucket through presigned POST links that pin the object key, the type (`video/webm` or `video/mp4`) and a maximum size
+(`INTERVIEW_RECORDING_MAX_CHUNK_BYTES`, default 8 MiB). Recruiters play back through presigned GET links
+(`INTERVIEW_RECORDING_PLAYBACK_TTL_SECONDS`, default 900). Objects are stored as
+`<prefix><account>/<interview>/<attempt>/chunks/00000.webm`, so one attempt is deleted by its prefix.
+
+Create one bucket per environment (dev and production separately):
+
+1. Create the bucket in the app's region with Block Public Access fully on. Default encryption (SSE-S3) is on for new buckets; keep it.
+2. CORS, so the candidate page can upload and the report can play back. Replace the origin with `INTERVIEW_SERVICE_ORIGIN`:
+
+   ```json
+   [{ "AllowedOrigins": ["https://recooty-interview.on-forge.com"], "AllowedMethods": ["POST", "GET", "HEAD"],
+      "AllowedHeaders": ["*"], "ExposeHeaders": ["ETag"], "MaxAgeSeconds": 3600 }]
+   ```
+
+3. An IAM user for the app with only this policy (replace the bucket name and prefix), then put its access key in the
+   app's `.env` as `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Never commit or paste the key elsewhere.
+
+   ```json
+   { "Version": "2012-10-17", "Statement": [
+     { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+       "Resource": "arn:aws:s3:::BUCKET/interviews/*" },
+     { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::BUCKET",
+       "Condition": { "StringLike": { "s3:prefix": "interviews/*" } } } ] }
+   ```
+
+4. Set `INTERVIEW_RECORDING_ENABLED=true`, `INTERVIEW_RECORDING_S3_BUCKET` and `INTERVIEW_RECORDING_S3_REGION`, then run:
+
+   ```bash
+   npm run service:recording-check
+   ```
+
+   It uploads a small test object exactly as the browser will, confirms S3 refuses an oversized upload, plays it back
+   through a presigned link, confirms anonymous access is blocked, and deletes it. It does not need the database.
+   The browser upload also needs CORS, which this server-side check cannot exercise.

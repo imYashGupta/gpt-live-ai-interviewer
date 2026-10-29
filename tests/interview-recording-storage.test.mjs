@@ -106,3 +106,58 @@ test('failed deletions are reported instead of being counted', async () => {
   const storage = new RecordingStorage(recordingStorageConfig(env), client);
   await assert.rejects(storage.deletePrefix(attempt), /could not be deleted/);
 });
+
+function multipartClient({ failPart = 0 } = {}) {
+  const objects = new Map(), calls = [];
+  let parts = [];
+  const client = { objects, calls, send: async command => {
+    const name = command.constructor.name, input = command.input;
+    calls.push(name);
+    if (name === 'GetObjectCommand') {
+      const bytes = objects.get(input.Key);
+      return { Body: { transformToByteArray: async () => bytes } };
+    }
+    if (name === 'CreateMultipartUploadCommand') { parts = []; return { UploadId: 'up1' }; }
+    if (name === 'UploadPartCommand') {
+      if (failPart === input.PartNumber) throw new Error('part failed');
+      parts.push({ n: input.PartNumber, body: input.Body }); return { ETag: `e${input.PartNumber}` };
+    }
+    if (name === 'CompleteMultipartUploadCommand') {
+      assert.deepEqual(input.MultipartUpload.Parts.map(p => p.PartNumber), parts.map(p => p.n));
+      objects.set(input.Key, Buffer.concat(parts.map(p => p.body))); return {};
+    }
+    if (name === 'AbortMultipartUploadCommand') return {};
+    if (name === 'DeleteObjectsCommand') { for (const o of input.Delete.Objects) objects.delete(o.Key); return {}; }
+    throw new Error(`unexpected ${name}`);
+  } };
+  return client;
+}
+
+test('join concatenates chunks in order into buffered multipart parts', async () => {
+  const client = multipartClient();
+  const storage = new RecordingStorage(recordingStorageConfig(env), client);
+  const keys = [0, 1, 2, 3, 4].map(n => chunkKey(attempt, n, 'video/webm'));
+  keys.forEach((key, n) => client.objects.set(key, Buffer.alloc(4, n)));
+  let progress = 0;
+  const target = recordingKey(attempt, 'video/webm');
+  const bytes = await storage.join(keys, target, 'video/webm', async () => { progress++; }, 8);
+  assert.equal(bytes, 20);
+  // 8-byte parts: chunks 0+1, 2+3, then the smaller final part.
+  assert.equal(progress, 3);
+  assert.deepEqual([...client.objects.get(target)], [0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4]);
+  await storage.deleteKeys(keys);
+  assert.deepEqual([...client.objects.keys()], [target]);
+  await assert.rejects(storage.join([], target, 'video/webm'), /Nothing to join/);
+  await assert.rejects(storage.join(['other/x'], target, 'video/webm'), /outside the recording prefix/);
+  await assert.rejects(storage.deleteKeys(['other/x']), /outside the recording prefix/);
+});
+
+test('a failed join aborts the multipart upload', async () => {
+  const client = multipartClient({ failPart: 2 });
+  const storage = new RecordingStorage(recordingStorageConfig(env), client);
+  const keys = [0, 1, 2].map(n => chunkKey(attempt, n, 'video/webm'));
+  keys.forEach(key => client.objects.set(key, Buffer.alloc(8)));
+  await assert.rejects(storage.join(keys, recordingKey(attempt, 'video/webm'), 'video/webm', async () => {}, 8), /part failed/);
+  assert.ok(client.calls.includes('AbortMultipartUploadCommand'));
+  assert.ok(!client.calls.includes('CompleteMultipartUploadCommand'));
+});

@@ -221,7 +221,7 @@ Create one bucket per environment (dev and production separately):
 
    ```json
    { "Version": "2012-10-17", "Statement": [
-     { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+     { "Effect": "Allow", "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
        "Resource": "arn:aws:s3:::BUCKET/interviews/*" },
      { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::BUCKET",
        "Condition": { "StringLike": { "s3:prefix": "interviews/*" } } } ] }
@@ -234,5 +234,12 @@ Create one bucket per environment (dev and production separately):
    ```
 
    It uploads a small test object exactly as the browser will, confirms S3 refuses an oversized upload, plays it back
-   through a presigned link, confirms anonymous access is blocked, and deletes it. It does not need the database.
+   through a presigned link, joins two chunks the way the worker does, confirms anonymous access is blocked, and
+   deletes everything it created. It does not need the database.
    The browser upload also needs CORS, which this server-side check cannot exercise.
+
+After an interview, the worker queues a `recording` job once the upload window has closed (5 minutes after the
+attempt ends, checked every 30 seconds). The job joins the confirmed chunks into `recording.webm` (or `.mp4`) with a
+multipart upload and deletes the chunk objects. The recording becomes `ready`, `incomplete` (some chunks missing; the
+file still plays) or `failed` (the first chunk, which holds the video header, never arrived; chunks are kept). Chunk
+rows stay in the database as evidence of gaps. The worker must run with the same `INTERVIEW_RECORDING_*` settings.

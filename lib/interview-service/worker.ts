@@ -10,6 +10,7 @@ import type { WebhookTransport } from "./delivery.ts";
 
 import { claimJob, ownsLease, finishJob, type Job } from "./job-leases.ts";
 import { executeLive, assessLive } from "./live-worker.ts";
+import { finalizeRecording, scheduleRecordingJobs } from "./recordings.ts";
 export { claimJob } from "./job-leases.ts";
 export type { Job } from "./job-leases.ts";
 
@@ -86,6 +87,7 @@ export async function runClaimedJob(service: InterviewService,job: Job,transport
     else if (job.kind === "execute") await execute(service,job);
     else if (job.kind === "assess") await assess(service,job);
     else if (job.kind === "deliver") await deliver(service,job,transport);
+    else if (job.kind === "recording") await finalizeRecording(service,job);
     else throw new Error("Unknown job");
   } catch {
     if (job.kind === "assess" && job.attempts >= 3) {
@@ -116,8 +118,10 @@ export async function expireInvitations(service: InterviewService) {
     return rows.rowCount ?? 0;
   });
 }
+export { scheduleRecordingJobs } from "./recordings.ts";
 export async function runWorkerOnce(service: InterviewService,transport: WebhookTransport) {
   await expireInvitations(service);
+  await scheduleRecordingJobs(service);
   const job = await claimJob(service);
   if (!job) return false;
   await runClaimedJob(service,job,transport);

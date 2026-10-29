@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
-import { attemptPrefix, chunkKey, maxChunkSequence, recordingType, type RecordingType } from "./recording-storage.ts";
+import { attemptPrefix, chunkKey, maxChunkSequence, recordingKey, recordingType, type RecordingType } from "./recording-storage.ts";
+import { finishJob, ownsLease, type Job } from "./job-leases.ts";
 import { newId, ServiceError } from "./security.ts";
 import { transaction } from "./postgres.ts";
 import { candidateRow } from "./candidate.ts";
@@ -91,7 +92,7 @@ export function missingChunks(chunks: Pick<ChunkRow,"sequence" | "confirmed_at">
 /** The consent text version the candidate page shows before recording; bump it whenever that text changes. */
 export const recordingConsentVersion = "video_v1";
 // The last chunk is uploaded after the recorder stops, which can be shortly after the attempt ends.
-const uploadGraceSeconds = 300;
+export const uploadGraceSeconds = 300;
 
 function storage(service: InterviewService) {
   if (!service.recording) throw new ServiceError(409,"recording_disabled");
@@ -166,4 +167,66 @@ export async function confirmCandidateChunk(service: InterviewService, token: st
   if (!bytes) throw new ServiceError(409,"chunk_not_uploaded");
   const confirmed = await transaction(service.pool,db => confirmChunk(db,recording.id,sequence,bytes));
   return { sequence, bytes: Number(confirmed.bytes) };
+}
+
+/**
+ * Queues a join for every recording whose upload window has closed. Safe to run repeatedly: one job per recording.
+ * The window closes uploadGraceSeconds after the attempt ends (or its deadline, if it never recorded an end).
+ */
+export async function scheduleRecordingJobs(service: InterviewService) {
+  const result = await service.pool.query(`INSERT INTO service_jobs(id,kind,dedupe_key,interview_id)
+    SELECT 'job_'||replace(gen_random_uuid()::text,'-',''),'recording','recording:'||r.id,r.interview_id
+    FROM service_recordings r JOIN service_attempts a ON a.id=r.attempt_id
+    WHERE r.status='recording' AND LEAST(coalesce(a.ended_at,a.deadline_at),a.deadline_at)+$1*interval '1 second'<now()
+    ORDER BY r.started_at LIMIT 100
+    ON CONFLICT (dedupe_key) DO NOTHING`,[uploadGraceSeconds + 30]);
+  return result.rowCount ?? 0;
+}
+
+async function renewLease(service: InterviewService, job: Job) {
+  const renewed = await service.pool.query("UPDATE service_jobs SET lease_until=now()+interval '30 seconds' WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()",
+    [job.id,job.lease_token]);
+  if (!renewed.rowCount) throw new Error("Recording job lease lost");
+}
+
+/**
+ * Joins the confirmed chunks into one file. A recording without its first chunk cannot play (the first chunk holds
+ * the container header), so it is marked failed and its chunks are kept. Gaps produce a playable but incomplete file.
+ */
+export async function finalizeRecording(service: InterviewService, job: Job) {
+  const plan = await transaction(service.pool,async db => {
+    if (!await ownsLease(db,job)) return null;
+    const interview = (await db.query("SELECT deletion_requested_at FROM service_interviews WHERE id=$1",[job.interview_id])).rows[0];
+    const recording = (await db.query<RecordingRow>("SELECT * FROM service_recordings WHERE interview_id=$1 FOR UPDATE",[job.interview_id])).rows[0];
+    // Deletion owns the objects of a deleted interview; nothing is joined for it.
+    if (!recording || interview?.deletion_requested_at || !["recording","finalizing"].includes(recording.status)) {
+      await finishJob(db,job); return null;
+    }
+    if (!service.recording) throw new Error("Recording storage is not configured");
+    await db.query("UPDATE service_recordings SET status='finalizing' WHERE id=$1",[recording.id]);
+    return { recording, chunks: await recordingChunks(db,recording.id) };
+  });
+  if (!plan) return;
+  const store = service.recording!;
+  const { recording, chunks } = plan;
+  const confirmed = chunks.filter(c => c.confirmed_at);
+  const highest = confirmed.reduce((max,c) => Math.max(max,c.sequence),-1);
+  const lost = missingChunks(chunks).length > 0 || chunks.some(c => !c.confirmed_at && c.sequence > highest);
+  let status = "failed", objectKey: string | null = null, objectBytes: number | null = null;
+  if (confirmed.some(c => c.sequence === 0)) {
+    objectKey = recordingKey(recording.object_prefix,recording.content_type);
+    objectBytes = await store.join(confirmed.map(c => c.object_key),objectKey,recording.content_type,() => renewLease(service,job));
+    status = lost ? "incomplete" : "ready";
+  }
+  const saved = await transaction(service.pool,async db => {
+    if (!await ownsLease(db,job)) return false;
+    await db.query("UPDATE service_recordings SET status=$2,object_key=$3,object_bytes=$4,ended_at=now() WHERE id=$1",
+      [recording.id,status,objectKey,objectBytes]);
+    await finishJob(db,job);
+    return true;
+  });
+  // The joined file replaces the chunks. Chunk rows stay as evidence of gaps; leftover objects go with deletion.
+  if (saved && objectKey) await store.deleteKeys(confirmed.map(c => c.object_key)).catch(() => {
+    console.error(`Recording ${recording.id}: chunk cleanup failed; chunks remain until the interview is deleted.`);
+  });
 }

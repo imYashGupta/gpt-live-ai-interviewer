@@ -1,4 +1,7 @@
-import { DeleteObjectsCommand, GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import {
+  AbortMultipartUploadCommand, CompleteMultipartUploadCommand, CreateMultipartUploadCommand, DeleteObjectsCommand,
+  GetObjectCommand, HeadObjectCommand, ListObjectsV2Command, S3Client, UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { assertId } from "./security.ts";
@@ -98,6 +101,48 @@ export class RecordingStorage {
     } catch (error) {
       if ((error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode === 404) return null;
       throw error;
+    }
+  }
+  /**
+   * Joins chunk objects, in the given order, into one object with a multipart upload. Browser recorders emit one
+   * continuous stream, so byte concatenation yields a playable file. Chunks are far smaller than S3's 5 MiB minimum
+   * part size, so they are buffered into larger parts; memory stays near one part. Returns the joined size.
+   */
+  async join(keys: string[], target: string, type: RecordingType, progress: () => Promise<void> = async () => {}, partBytes = 8 * 1024 * 1024) {
+    if (!keys.length) throw new Error("Nothing to join");
+    const Bucket = this.config.bucket, Key = this.owned(target);
+    const { UploadId } = await this.client.send(new CreateMultipartUploadCommand({ Bucket, Key, ContentType: type }));
+    const parts: { ETag?: string; PartNumber: number }[] = [];
+    let buffered: Uint8Array[] = [], size = 0, total = 0;
+    const flush = async () => {
+      const PartNumber = parts.length + 1;
+      const { ETag } = await this.client.send(new UploadPartCommand({ Bucket, Key, UploadId, PartNumber, Body: Buffer.concat(buffered) }));
+      parts.push({ ETag, PartNumber });
+      buffered = []; size = 0;
+      await progress();
+    };
+    try {
+      for (const key of keys) {
+        const object = await this.client.send(new GetObjectCommand({ Bucket, Key: this.owned(key) }));
+        if (!object.Body) throw new Error("Empty recording chunk");
+        const bytes = await object.Body.transformToByteArray();
+        buffered.push(bytes); size += bytes.length; total += bytes.length;
+        if (size >= partBytes) await flush();
+      }
+      if (size) await flush();
+      await this.client.send(new CompleteMultipartUploadCommand({ Bucket, Key, UploadId, MultipartUpload: { Parts: parts } }));
+      return total;
+    } catch (error) {
+      await this.client.send(new AbortMultipartUploadCommand({ Bucket, Key, UploadId })).catch(() => {});
+      throw error;
+    }
+  }
+  /** Deletes specific objects inside the recording prefix. */
+  async deleteKeys(keys: string[]) {
+    for (let i = 0; i < keys.length; i += 1000) {
+      const Objects = keys.slice(i, i + 1000).map(key => ({ Key: this.owned(key) }));
+      const result = await this.client.send(new DeleteObjectsCommand({ Bucket: this.config.bucket, Delete: { Objects, Quiet: true } }));
+      if (result.Errors?.length) throw new Error("Some recording objects could not be deleted");
     }
   }
   /** Deletes every object under an attempt prefix and returns how many were removed. */

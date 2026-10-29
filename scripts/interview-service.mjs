@@ -6,8 +6,8 @@ import { issueCredential, assertId } from "../lib/interview-service/security.ts"
 import { createClient, renameClient, clientUsage, monthRange, registerWebhook } from "../lib/interview-service/clients.ts";
 import { serviceRuntime } from "../lib/interview-service/runtime.ts";
 import { destination, webhookTransport } from "../lib/interview-service/delivery.ts";
-import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob } from "../lib/interview-service/worker.ts";
-import { attemptPrefix, chunkKey, recordingStorage } from "../lib/interview-service/recording-storage.ts";
+import { runWorkerOnce, expireInvitations, claimJob, runClaimedJob, scheduleRecordingJobs } from "../lib/interview-service/worker.ts";
+import { attemptPrefix, chunkKey, recordingKey, recordingStorage } from "../lib/interview-service/recording-storage.ts";
 
 const [command,...args] = process.argv.slice(2);
 const webhookHosts=(process.env.INTERVIEW_WEBHOOK_HOSTS ?? "").split(",").map(x=>x.trim()).filter(Boolean);
@@ -73,6 +73,17 @@ async function recordingCheck() {
   });
   if (Buffer.compare(Buffer.from(playback),Buffer.from(body)) !== 0) throw new Error("Played back bytes differ from the upload");
   console.log("Playback through presigned GET: ok");
+  const second = new TextEncoder().encode(" second chunk");
+  const secondForm = await step("Creating an upload link", () => storage.uploadForm(chunkKey(attempt,2,"video/webm"),"video/webm"));
+  const secondData = new FormData();
+  for (const [name,value] of Object.entries(secondForm.fields)) secondData.append(name,value);
+  secondData.append("file",new Blob([second],{type:"video/webm"}));
+  if (!(await fetch(secondForm.url,{method:"POST",body:secondData})).ok) throw new Error("Second chunk upload failed");
+  const joinedKey = recordingKey(attempt,"video/webm");
+  const joinedSize = await step("Joining chunks", () => storage.join([key,chunkKey(attempt,2,"video/webm")],joinedKey,"video/webm"));
+  const joined = await step("Reading the joined file", async () => new Uint8Array(await (await fetch(await storage.playbackUrl(joinedKey))).arrayBuffer()));
+  if (joinedSize !== body.length + second.length || Buffer.compare(Buffer.from(joined),Buffer.concat([body,second])) !== 0) throw new Error("Joined file does not match its chunks");
+  console.log("Joining chunks with a multipart upload: ok");
   if (!storage.config.endpoint) {
     const anonymous = await fetch(`https://${bucket}.s3.${region}.amazonaws.com/${key}`);
     if (anonymous.ok) throw new Error("The object is publicly readable; block public access on the bucket");
@@ -190,8 +201,10 @@ try {
       const concurrency = Number(process.env.INTERVIEW_WORKER_CONCURRENCY ?? "4");
       if (!Number.isInteger(concurrency) || concurrency < 2 || concurrency > 20) throw new Error("Worker concurrency must be 2–20");
       const active = new Set();
+      let recordingScan = 0;
       while (!stopping) {
         await expireInvitations(service);
+        if (Date.now() - recordingScan > 30_000) { recordingScan = Date.now(); await scheduleRecordingJobs(service); }
         if (active.size < concurrency) {
           const job = await claimJob(service, active.size >= concurrency - 1);
           if (job) {

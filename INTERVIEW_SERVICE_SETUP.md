@@ -183,3 +183,11 @@ npm run service:clients            # interviews and measured/billable minutes pe
 npm run service:clients -- 2026-09 # a given month
 npm run service:rename -- acct_... recooty_dev
 ```
+
+## Webhooks for a client environment
+
+1. In that Recooty environment (public HTTPS): `php artisan interviews:register-webhook` (or `--url=https://host/api/interview-service/webhook`). It prints the signing secret and the endpoint ID; rerunning returns the same ones.
+2. Put the secret in that environment's `INTERVIEW_SERVICE_WEBHOOK_SECRET` and clear its config cache.
+3. Here, add the hostname to `INTERVIEW_WEBHOOK_HOSTS`, restart the app and worker, then `npm run service:activate-webhook -- we_...`. Only events created after activation are delivered; polling covers earlier ones.
+
+Other client commands: `npm run service:credential -- ACCOUNT_ID OUTPUT_FILE` issues a new credential, `npm run service:revoke -- key_...` revokes one.

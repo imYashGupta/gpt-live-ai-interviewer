@@ -18,3 +18,13 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Never reset/discard uncommitted changes to recover context. Preserve unrelated user work. Do not fabricate a stop reason or treat an absent command result as proof the command failed. A blocked approval remains blocked until resolved; checkpoints do not bypass approval rules.
 - Keep credentials, invitation/session tokens and candidate transcripts out of checkpoint files. Reference private config locations and opaque test/job IDs only when needed. Do not overwrite another task's checkpoint; these files are scoped to this integration.
 - Commit checkpoints with related completed work under the user's existing commit guidelines; do not create a separate commit for every update. Keep the detailed handoff current at phase boundaries.
+
+## Git commits
+
+Follow these for every commit in this repository, including commits made by AI agents:
+
+- Use Conventional Commits: `<type>(<optional scope>): <description>`, e.g. `feat(interview-service): add named clients`. Common types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `build`, `ci`. Imperative mood, concise subject; add a body only when it carries context the subject cannot.
+- No emoji or gitmoji anywhere in the message.
+- No co-author trailers (`Co-authored-by` or similar) and no tool attribution lines.
+- Group related files: each commit holds one logical change. Do not mix unrelated changes, and leave unrelated local edits (e.g. a regenerated `next-env.d.ts` or `tsconfig.tsbuildinfo`) out of the commit.
+- Only commit or push when the user asks.

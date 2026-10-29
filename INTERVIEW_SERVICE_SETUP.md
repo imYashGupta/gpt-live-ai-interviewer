@@ -240,8 +240,9 @@ Create one bucket per environment (dev and production separately):
    deletes everything it created. It does not need the database.
    The browser upload also needs CORS, which this server-side check cannot exercise.
 
-After an interview, the worker queues a `recording` job once the upload window has closed (5 minutes after the
-attempt ends, checked every 30 seconds). The job joins the confirmed chunks into `recording.webm` (or `.mp4`) with a
+After an interview, the worker queues a `recording` job about 45 seconds after the attempt ends when every chunk
+has arrived, or once the upload window closes (5 minutes after the end) when one is still missing. It checks every
+15 seconds. The job joins the confirmed chunks into `recording.webm` (or `.mp4`) with a
 multipart upload and deletes the chunk objects. The recording becomes `ready`, `incomplete` (some chunks missing; the
 file still plays) or `failed` (the first chunk, which holds the video header, never arrived; chunks are kept). Chunk
 rows stay in the database as evidence of gaps. The worker must run with the same `INTERVIEW_RECORDING_*` settings.

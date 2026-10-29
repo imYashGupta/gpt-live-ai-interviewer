@@ -94,6 +94,8 @@ export function missingChunks(chunks: Pick<ChunkRow,"sequence" | "confirmed_at">
 export const recordingConsentVersion = "video_v1";
 // The last chunk is uploaded after the recorder stops, which can be shortly after the attempt ends.
 export const uploadGraceSeconds = 300;
+// How long after the attempt ends a fully uploaded recording waits before it is joined.
+const settleSeconds = 45;
 
 function storage(service: InterviewService) {
   if (!service.recording) throw new ServiceError(409,"recording_disabled");
@@ -172,15 +174,19 @@ export async function confirmCandidateChunk(service: InterviewService, token: st
 
 /**
  * Queues a join for every recording whose upload window has closed. Safe to run repeatedly: one job per recording.
- * The window closes uploadGraceSeconds after the attempt ends (or its deadline, if it never recorded an end).
+ * The window closes uploadGraceSeconds after the attempt ends (or its deadline, if it never recorded an end). Once the
+ * attempt has ended and every issued chunk has arrived, the join starts after settleSeconds instead: the browser asks
+ * for its final chunk's link within seconds of the end, so a quiet recording after that is complete.
  */
 export async function scheduleRecordingJobs(service: InterviewService) {
   const result = await service.pool.query(`INSERT INTO service_jobs(id,kind,dedupe_key,interview_id)
     SELECT 'job_'||replace(gen_random_uuid()::text,'-',''),'recording','recording:'||r.id,r.interview_id
     FROM service_recordings r JOIN service_attempts a ON a.id=r.attempt_id
-    WHERE r.status='recording' AND LEAST(coalesce(a.ended_at,a.deadline_at),a.deadline_at)+$1*interval '1 second'<now()
+    WHERE r.status='recording' AND (LEAST(coalesce(a.ended_at,a.deadline_at),a.deadline_at)+$1*interval '1 second'<now()
+      OR (a.ended_at+$2*interval '1 second'<now() AND NOT EXISTS (SELECT 1 FROM service_recording_chunks c
+        WHERE c.recording_id=r.id AND c.confirmed_at IS NULL)))
     ORDER BY r.started_at LIMIT 100
-    ON CONFLICT (dedupe_key) DO NOTHING`,[uploadGraceSeconds + 30]);
+    ON CONFLICT (dedupe_key) DO NOTHING`,[uploadGraceSeconds + 30,settleSeconds]);
   return result.rowCount ?? 0;
 }
 

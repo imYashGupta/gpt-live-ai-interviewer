@@ -63,8 +63,8 @@ test('recording finalization on disposable Herd fixtures', {skip:!url}, async t 
       return (await pool.query('SELECT * FROM service_recordings WHERE interview_id=$1',[interviewId])).rows[0];
     }
 
-    await t.test('jobs are queued only after the upload window closes, once per recording',async()=>{
-      const f=await recording([0,1]);
+    await t.test('with a chunk outstanding, jobs are queued only after the upload window closes, once per recording',async()=>{
+      const f=await recording([0,1,2],{upload:[0,1]});
       await end(f.attemptId,2);
       await scheduleRecordingJobs(service);
       assert.equal(await job(f.interviewId),undefined);
@@ -76,6 +76,24 @@ test('recording finalization on disposable Herd fixtures', {skip:!url}, async t 
       await pool.query("UPDATE service_attempts SET deadline_at=now()-interval '10 minutes' WHERE id=$1",[g.attemptId]);
       await scheduleRecordingJobs(service);
       assert.ok(await job(g.interviewId));
+    });
+
+    await t.test('a fully uploaded recording is joined soon after the end; an outstanding chunk keeps the full window',async()=>{
+      const done=await recording([0,1]);
+      await pool.query("UPDATE service_attempts SET ended_at=now()-interval '20 seconds' WHERE id=$1",[done.attemptId]);
+      await scheduleRecordingJobs(service);
+      assert.equal(await job(done.interviewId),undefined);
+      await pool.query("UPDATE service_attempts SET ended_at=now()-interval '60 seconds' WHERE id=$1",[done.attemptId]);
+      await scheduleRecordingJobs(service);
+      assert.ok(await job(done.interviewId));
+      const waiting=await recording([0,1,2],{upload:[0,1]});
+      await pool.query("UPDATE service_attempts SET ended_at=now()-interval '60 seconds' WHERE id=$1",[waiting.attemptId]);
+      await scheduleRecordingJobs(service);
+      assert.equal(await job(waiting.interviewId),undefined);
+      // An attempt still running is never joined early, even with every chunk in.
+      const running=await recording([0]);
+      await scheduleRecordingJobs(service);
+      assert.equal(await job(running.interviewId),undefined);
     });
 
     await t.test('a complete recording joins in order, replaces its chunks and closes uploads',async()=>{

@@ -204,7 +204,7 @@ try {
       let recordingScan = 0;
       while (!stopping) {
         await expireInvitations(service);
-        if (Date.now() - recordingScan > 30_000) { recordingScan = Date.now(); await scheduleRecordingJobs(service); }
+        if (Date.now() - recordingScan > 15_000) { recordingScan = Date.now(); await scheduleRecordingJobs(service); }
         if (active.size < concurrency) {
           const job = await claimJob(service, active.size >= concurrency - 1);
           if (job) {

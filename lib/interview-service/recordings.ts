@@ -1,6 +1,9 @@
 import type { PoolClient } from "pg";
 import { attemptPrefix, chunkKey, maxChunkSequence, recordingType, type RecordingType } from "./recording-storage.ts";
 import { newId, ServiceError } from "./security.ts";
+import { transaction } from "./postgres.ts";
+import { candidateRow } from "./candidate.ts";
+import type { InterviewService } from "./service.ts";
 
 export interface RecordingRow {
   id: string; account_id: string; interview_id: string; attempt_id: string; object_prefix: string;
@@ -83,4 +86,84 @@ export function missingChunks(chunks: Pick<ChunkRow,"sequence" | "confirmed_at">
   const highest = [...confirmed].reduce((a,b) => Math.max(a,b));
   for (let sequence = 0; sequence < highest; sequence++) if (!confirmed.has(sequence)) missing.push(sequence);
   return missing;
+}
+
+/** The consent text version the candidate page shows before recording; bump it whenever that text changes. */
+export const recordingConsentVersion = "video_v1";
+// The last chunk is uploaded after the recorder stops, which can be shortly after the attempt ends.
+const uploadGraceSeconds = 300;
+
+function storage(service: InterviewService) {
+  if (!service.recording) throw new ServiceError(409,"recording_disabled");
+  return service.recording;
+}
+/** The candidate's own attempt and its recording, or an error when uploads are no longer accepted. */
+async function candidateAttempt(db: PoolClient, token: string | null) {
+  const row = await candidateRow(db,token,true);
+  if (!row.attempt_id || !["in_progress","completed","interrupted"].includes(row.execution_status)) throw new ServiceError(409,"not_started");
+  const attempt = (await db.query<{ id: string; ended_at: Date | null; deadline_at: Date }>(
+    "SELECT id,ended_at,deadline_at FROM service_attempts WHERE id=$1",[row.attempt_id])).rows[0];
+  const closes = Math.min((attempt.ended_at ?? attempt.deadline_at).getTime(),attempt.deadline_at.getTime()) + uploadGraceSeconds * 1000;
+  if (Date.now() > closes) throw new ServiceError(409,"recording_closed");
+  return { row, attempt };
+}
+async function candidateRecording(db: PoolClient, token: string | null) {
+  const { row, attempt } = await candidateAttempt(db,token);
+  const recording = (await db.query<RecordingRow>("SELECT * FROM service_recordings WHERE attempt_id=$1",[attempt.id])).rows[0];
+  if (!recording) throw new ServiceError(409,"recording_not_started");
+  return { row, recording };
+}
+function chunkSequence(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => k !== "sequence")) throw new ServiceError(422,"validation_failed");
+  const { sequence } = input as { sequence?: unknown };
+  if (typeof sequence !== "number") throw new ServiceError(422,"validation_failed");
+  assertSequence(sequence);
+  return sequence;
+}
+
+export async function startCandidateRecording(service: InterviewService, token: string | null, input: unknown) {
+  const store = storage(service);
+  if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some(k => !["type","consent_version"].includes(k))) throw new ServiceError(422,"validation_failed");
+  const { type, consent_version } = input as { type?: unknown; consent_version?: unknown };
+  if (typeof type !== "string" || type.length > 100) throw new ServiceError(422,"validation_failed");
+  if (consent_version !== recordingConsentVersion) throw new ServiceError(422,"recording_consent_required");
+  let contentType: RecordingType;
+  try { contentType = recordingType(type); } catch { throw new ServiceError(415,"unsupported_recording_type"); }
+  return transaction(service.pool,async db => {
+    const { row, attempt } = await candidateAttempt(db,token);
+    if (row.execution_status !== "in_progress" || attempt.ended_at) throw new ServiceError(409,"recording_closed");
+    const recording = await openRecording(db,{ accountId: row.account_id, interviewId: row.id, attemptId: attempt.id },
+      store.config.prefix,contentType,consent_version);
+    return { status: recording.status, content_type: recording.content_type, max_chunk_bytes: store.config.maxChunkBytes,
+      max_sequence: Math.min(maxChunkSequence,row.request.configuration.duration_limit_seconds) };
+  });
+}
+
+/** Issues a presigned upload for one chunk. Chunks may arrive out of order; each sequence is bounded by the interview length. */
+export async function candidateChunkUpload(service: InterviewService, token: string | null, input: unknown) {
+  const store = storage(service);
+  const sequence = chunkSequence(input);
+  const chunk = await transaction(service.pool,async db => {
+    const { row, recording } = await candidateRecording(db,token);
+    // At most one chunk per second of interview, so a session cannot create unbounded rows.
+    if (sequence > row.request.configuration.duration_limit_seconds) throw new ServiceError(422,"validation_failed");
+    return { ...await issueChunk(db,recording.id,sequence), content_type: recording.content_type };
+  });
+  return { sequence, upload: await store.uploadForm(chunk.object_key,chunk.content_type) };
+}
+
+/** Confirms a chunk with the size S3 reports; the browser's own claim about the upload is not trusted. */
+export async function confirmCandidateChunk(service: InterviewService, token: string | null, input: unknown) {
+  const store = storage(service);
+  const sequence = chunkSequence(input);
+  const { recording, chunk } = await transaction(service.pool,async db => {
+    const { recording } = await candidateRecording(db,token);
+    const chunk = (await db.query<ChunkRow>("SELECT * FROM service_recording_chunks WHERE recording_id=$1 AND sequence=$2",[recording.id,sequence])).rows[0];
+    if (!chunk) throw new ServiceError(404,"chunk_not_issued");
+    return { recording, chunk };
+  });
+  const bytes = await store.size(chunk.object_key);
+  if (!bytes) throw new ServiceError(409,"chunk_not_uploaded");
+  const confirmed = await transaction(service.pool,db => confirmChunk(db,recording.id,sequence,bytes));
+  return { sequence, bytes: Number(confirmed.bytes) };
 }

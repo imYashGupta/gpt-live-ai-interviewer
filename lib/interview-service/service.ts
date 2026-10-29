@@ -6,6 +6,7 @@ import { validate, type InterviewRequest } from "./validation.ts";
 import { validateInterviewSemantics } from "./contract-rules.ts";
 import { requestDeletion, deletionStatus } from "./deletion.ts";
 import { webhookUrl } from "./delivery.ts";
+import type { RecordingStorage } from "./recording-storage.ts";
 
 export const capabilities = {
   schema_version: "1.0", modes: ["adaptive"], modalities: ["audio"], languages: ["en"],
@@ -72,6 +73,8 @@ export class InterviewService {
   key: Buffer;
   origin: string;
   live?: LiveOptions;
+  /** Set when INTERVIEW_RECORDING_ENABLED=true; candidate video upload endpoints refuse while it is absent. */
+  recording?: RecordingStorage;
   constructor(pool: Pool, encryptionKey: Buffer, origin: string, live?: LiveOptions) {
     this.live = live;
     if (encryptionKey.length !== 32) throw new Error("Service encryption key must be 32 bytes");

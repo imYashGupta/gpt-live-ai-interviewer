@@ -2,6 +2,7 @@ import { type InterviewService } from "./service.ts";
 import { newId, ServiceError } from "./security.ts";
 import { candidateConnection, candidateStatus, exchangeInvitation, startCandidate, stopCandidate } from "./candidate.ts";
 import type { InterviewRequest } from "./validation.ts";
+import { candidateChunkUpload, confirmCandidateChunk, startCandidateRecording } from "./recordings.ts";
 
 const responseHeaders = { "Cache-Control":"no-store", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" };
 function json(body: unknown,status = 200,headers: Record<string,string> = {}) { return Response.json(body,{status,headers:{...responseHeaders,...headers}}); }
@@ -52,6 +53,9 @@ export async function handleCandidate(request: Request,service: InterviewService
       if ((offer.sdp !== undefined && typeof offer.sdp !== "string") || (offer.consent_version !== undefined && typeof offer.consent_version !== "string")) throw new ServiceError(422,"validation_failed");
       return json(await startCandidate(service,candidateToken(request),offer));
     }
+    if (request.method === "POST" && url.pathname === "/candidate/recording/start") return json(await startCandidateRecording(service,candidateToken(request),await body(request)));
+    if (request.method === "POST" && url.pathname === "/candidate/recording/chunks") return json(await candidateChunkUpload(service,candidateToken(request),await body(request)));
+    if (request.method === "POST" && url.pathname === "/candidate/recording/chunks/confirm") return json(await confirmCandidateChunk(service,candidateToken(request),await body(request)));
     throw new ServiceError(404,"not_found");
   } catch (error) { return errorResponse(error); }
 }

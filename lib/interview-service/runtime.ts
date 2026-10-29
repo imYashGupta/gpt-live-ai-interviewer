@@ -3,6 +3,7 @@ import { OpenAILiveAssessor } from "./providers/openai-assessment.ts";
 import { createServicePool } from "./postgres.ts";
 import { InterviewService } from "./service.ts";
 import { ServiceError } from "./security.ts";
+import { recordingStorage } from "./recording-storage.ts";
 
 let instance: InterviewService | undefined;
 export function serviceRuntime(): InterviewService {
@@ -19,5 +20,10 @@ export function serviceRuntime(): InterviewService {
   instance = new InterviewService(createServicePool(url),Buffer.from(key,"hex"),origin,liveConfigured ? {
     enabled,provider:new OpenAILiveProvider(apiKey!),assessor:new OpenAILiveAssessor(apiKey!),
   } : undefined);
+  try { instance.recording = recordingStorage(); }
+  catch (error) {
+    // A recording misconfiguration must not stop interviews; uploads refuse with recording_disabled until fixed.
+    console.error(`Video recording disabled: ${(error as Error).message}`);
+  }
   return instance;
 }

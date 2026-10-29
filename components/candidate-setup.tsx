@@ -144,7 +144,8 @@ export default function CandidateSetup({
                 {session.job_title}
               </h1>
               <p className={styles.sub}>
-                A {minutes}-minute {recording ? "video" : "voice"} interview with an AI interviewer. Here’s what helps.
+                A {minutes}-minute {recording ? "video" : "voice"} interview. An AI interviewer asks the questions, not a
+                person. Here’s what helps.
               </p>
               <ul className={styles.list}>
                 <Tip icon="quiet" title="Find a quiet place" detail="Background noise makes it harder to hear you." />

@@ -35,7 +35,7 @@ export function CandidateTopBar({ children }: { children?: ReactNode }) {
         <span className={styles.brandMark}>
           <Icon name="spark" size={16} />
         </span>
-        Interview
+        AI interview
       </div>
       {children}
     </header>

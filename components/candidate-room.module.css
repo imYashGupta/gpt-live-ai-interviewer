@@ -63,6 +63,19 @@
   line-height: 1.25;
   margin: 0 0 8px;
 }
+.badge {
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #e8f0fe;
+  color: #174ea6;
+  font-size: 13px;
+  font-weight: 500;
+}
+.sub + .sub {
+  margin-top: 12px;
+}
 .sub {
   font-size: 15px;
   color: var(--ink-soft);

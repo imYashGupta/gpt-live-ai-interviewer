@@ -35,7 +35,7 @@ export default function CandidateCall({
 }) {
   const level = useAudioLevel(finishing ? null : remote);
   const speaking = level > 0.06;
-  const status = finishing ? "Ending…" : connecting ? "Connecting…" : speaking ? "Speaking" : "Interviewer";
+  const status = finishing ? "Ending…" : connecting ? "Connecting…" : speaking ? "Speaking" : "AI interviewer";
   return (
     <main className={styles.call}>
       <header className={styles.callTop}>

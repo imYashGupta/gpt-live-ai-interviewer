@@ -121,6 +121,8 @@ async (page) => {
     await page.waitForFunction(() => window.location.hash === "");
     assert(!page.url().includes("#"), "Invitation fragment must be removed");
     assert(!calls.some(c => c.path.endsWith("exchange")), "Invitation must not exchange until Continue");
+    await visible("You’ll be interviewed by AI");
+    assert((await page.locator("main").innerText()).includes("not a person"), "Candidates are told no person interviews them");
     await screenshot("welcome");
     await button("Continue").click();
     await visible("Step 1 of 4 · What to expect");

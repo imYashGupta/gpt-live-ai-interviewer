@@ -114,12 +114,18 @@ export default function Join() {
             className={`${styles.card} ${styles.narrow}`}
             aria-labelledby="welcome-title"
           >
+            <span className={styles.badge}>AI interview</span>
             <h1 id="welcome-title" className={styles.title}>
-              Your interview
+              You’ll be interviewed by AI
             </h1>
             <p className={styles.sub}>
+              An AI interviewer, not a person, asks you questions out loud and
+              listens to your answers. A recruiter reviews your interview
+              afterwards.
+            </p>
+            <p className={styles.sub}>
               Setup takes about two minutes. You’ll check your camera and
-              microphone before the interview starts.
+              microphone first.
             </p>
             <div className={styles.actions}>
               <button

@@ -191,3 +191,5 @@ npm run service:rename -- acct_... recooty_dev
 3. Here, add the hostname to `INTERVIEW_WEBHOOK_HOSTS`, restart the app and worker, then `npm run service:activate-webhook -- we_...`. Only events created after activation are delivered; polling covers earlier ones.
 
 Other client commands: `npm run service:credential -- ACCOUNT_ID OUTPUT_FILE` issues a new credential, `npm run service:revoke -- key_...` revokes one.
+
+Troubleshooting: `npm run service:attempts` lists live attempts that are active or ended without final usage (`connection_state` `queued` = never started, `creating` = provider rejected the session, `created`/`observing` = dropped mid-session). `npm run service:jobs` lists unfinished and dead jobs with their last error; `npm run service:replay -- job_...` requeues a dead job after its cause is fixed. The worker log names the reason each live attempt was interrupted.

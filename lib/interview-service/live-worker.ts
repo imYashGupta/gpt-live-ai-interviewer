@@ -211,6 +211,11 @@ export async function executeLive(service: InterviewService, job: Job) {
         Date.now() >= attempt.deadline_at.getTime() ||
         !service.liveEnabled()
       ) {
+        console.error(
+          `Live attempt ${attempt.id} not started: ${
+            !service.liveEnabled() ? "live interviews are disabled in this worker" : "closed before start"
+          }`
+        );
         await checkpoint(service, job, {
           id: "never_started",
           kind: "execution.closed",
@@ -325,7 +330,11 @@ export async function executeLive(service: InterviewService, job: Job) {
         return;
       }
     }
-  } catch {
+  } catch (error) {
+    // Operator diagnostics only: the message carries no transcript, SDP or credentials.
+    console.error(
+      `Live attempt ${attempt.id} interrupted: ${error instanceof Error ? error.message : "unknown error"}`
+    );
     const latest = (
       await service.pool.query("SELECT * FROM service_attempts WHERE id=$1", [
         attempt.id,

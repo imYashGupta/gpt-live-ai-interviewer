@@ -22,7 +22,8 @@ export function webhookUrl(urlString: string, production = process.env.NODE_ENV 
 export async function destination(urlString: string, allowedHosts: string[], production = process.env.NODE_ENV === "production") {
   const url = webhookUrl(urlString,production);
   const addressKind = isIP(url.hostname);
-  if (!allowedHosts.includes(url.hostname)) throw new Error("Destination not allowed");
+  // Endpoints are active only after an operator registers or activates them; the host list is an optional extra restriction.
+  if (allowedHosts.length && !allowedHosts.includes(url.hostname)) throw new Error("Destination not allowed");
   const addresses = addressKind === 4 ? [{address:url.hostname}] : await lookup(url.hostname,{family:4,all:true});
   if (!addresses.length || production && addresses.some(a => !isPublicIPv4(a.address))) throw new Error("Destination is not public IPv4");
   return { url, address: addresses[0].address };

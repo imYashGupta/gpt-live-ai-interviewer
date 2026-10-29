@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
-import { newId, provisionAccount } from "./security.ts";
+import { newId, newToken, provisionAccount, seal } from "./security.ts";
+import { webhookUrl } from "./delivery.ts";
 
 /** Lowercase operator-facing client names such as recooty, recooty_dev or recooty_staging. */
 export const CLIENT_NAME = /^[a-z][a-z0-9_]{1,62}$/;
@@ -12,6 +13,23 @@ export async function createClient(db: PoolClient, name: string) {
   const workspaceId = newId("ws");
   await db.query("INSERT INTO service_workspaces(id,account_id,external_reference,display_name) VALUES ($1,$2,$3,$4)",[workspaceId,account.accountId,"default",name]);
   return { ...account, clientWorkspaceId: workspaceId };
+}
+
+/** Every event a client can receive; clients re-read state on each, so subscribing to all is safe. */
+export const WEBHOOK_EVENTS = ["interview.started","interview.completed","interview.interrupted","interview.failed","interview.cancelled",
+  "interview.expired","interview.deleted","result.ready","result.failed","usage.settled","usage.adjusted"];
+
+/**
+ * Operator-registered webhook: active at once, since the operator running this is the ownership check.
+ * Re-running for the same URL issues a new secret; the client keeps the old one as its previous secret while switching.
+ */
+export async function registerWebhook(db: PoolClient, accountId: string, url: string, key: Buffer) {
+  const target = webhookUrl(url);
+  const secret = newToken("whsec");
+  const id = (await db.query(`INSERT INTO service_webhook_endpoints(id,account_id,url,secret_ciphertext,event_types,status)
+    VALUES ($1,$2,$3,$4,$5,'active') ON CONFLICT (account_id,url) DO UPDATE SET secret_ciphertext=EXCLUDED.secret_ciphertext,
+    event_types=EXCLUDED.event_types,status='active' RETURNING id`,[newId("we"),accountId,target.href,seal(secret,key),WEBHOOK_EVENTS])).rows[0].id as string;
+  return { id, url: target.href, secret };
 }
 
 export async function renameClient(db: Pool | PoolClient, accountId: string, name: string) {

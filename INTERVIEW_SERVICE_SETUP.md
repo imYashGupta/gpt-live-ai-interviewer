@@ -170,13 +170,13 @@ Every client receives billable seconds; whether to charge its own customers is t
 
 ## Provisioning a client
 
-Create one client per consuming environment, for example `recooty`, `recooty_staging` and `recooty_dev`, so their usage is reported separately:
+Create one client per consuming environment, for example `recooty`, `recooty_staging` and `recooty_dev`, so their usage is reported separately. Options use `--name=value`, with or without `--` after the script name:
 
 ```sh
-npm run service:provision -- recooty_staging
+npm run service:provision --client=recooty_staging --webhook=https://staging.recooty.app/api/interview-service/webhook
 ```
 
-This creates the client account, an account-level credential and the client's single workspace, and prints them once as the three Recooty settings below. The credential is stored only as a hash and cannot be shown again; issue a new one with `credential` if it is lost. To write them to a private file instead (never overwriting an existing one), add a path: `npm run service:provision -- recooty_staging .data/recooty_staging-credential.json`. Configure that environment of the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`) and delete any credential file afterwards. Names are lowercase letters, digits and underscores and must be unique. The service does not track the client's own teams or customers.
+This creates the client account, an account-level credential and the client's single workspace, and prints them once as the Recooty settings below. With `--webhook=URL` it also registers that client's webhook, already active, and prints its signing secret. The credential is stored only as a hash and cannot be shown again; issue a new one with `credential` if it is lost. To write them to a private file instead (never overwriting an existing one), add `--output=.data/recooty_staging-credential.json`. Configure that environment of the client with those three values (Recooty: `INTERVIEW_SERVICE_ACCOUNT_ID`, `INTERVIEW_SERVICE_CREDENTIAL`, `INTERVIEW_SERVICE_WORKSPACE_ID`, `INTERVIEW_SERVICE_WEBHOOK_SECRET`) and delete any credential file afterwards. Names are lowercase letters, digits and underscores and must be unique. The service does not track the client's own teams or customers.
 
 ```sh
 npm run service:clients            # interviews and measured/billable minutes per client, this month (UTC)
@@ -186,9 +186,13 @@ npm run service:rename -- acct_... recooty_dev
 
 ## Webhooks for a client environment
 
-1. In that Recooty environment (public HTTPS): `php artisan interviews:register-webhook` (or `--url=https://host/api/interview-service/webhook`). It prints the signing secret and the endpoint ID; rerunning returns the same ones.
-2. Put the secret in that environment's `INTERVIEW_SERVICE_WEBHOOK_SECRET` and clear its config cache.
-3. Here, add the hostname to `INTERVIEW_WEBHOOK_HOSTS`, restart the app and worker, then `npm run service:activate-webhook -- we_...`. Only events created after activation are delivered; polling covers earlier ones.
+Pass `--webhook=URL` when provisioning, or add one to an existing client (by name or account ID):
+
+```sh
+npm run service:webhook --client=recooty_dev --webhook=https://dev.recooty.app/api/interview-service/webhook
+```
+
+It prints `INTERVIEW_SERVICE_WEBHOOK_SECRET` for that Recooty environment's `.env` (clear its config cache afterwards). The endpoint is active at once and receives every event; only events created from then on are delivered, and polling covers earlier ones. Rerunning for the same URL issues a new secret: keep the old one in `INTERVIEW_SERVICE_PREVIOUS_WEBHOOK_SECRET` until the new one is in place. Production delivery still requires public HTTPS on port 443. `INTERVIEW_WEBHOOK_HOSTS` is optional; when set, only those hostnames receive webhooks. Endpoints registered through the API stay pending until `npm run service:activate-webhook -- we_...`.
 
 Other client commands: `npm run service:credential -- ACCOUNT_ID OUTPUT_FILE` issues a new credential, `npm run service:revoke -- key_...` revokes one.
 

@@ -16,6 +16,14 @@ export type CandidateSession = {
   opens_at: string;
   last_start_at: string;
   transport: "sandbox" | "webrtc";
+  recording_required?: boolean;
+};
+// Small enough for a candidate's upload link while the live audio runs; the recorder adds its own bitrate cap.
+const cameraConstraints = {
+  width: { ideal: 640 },
+  height: { ideal: 480 },
+  frameRate: { ideal: 15, max: 24 },
+  facingMode: "user",
 };
 async function request(path: string, input?: unknown, signal?: AbortSignal) {
   const response = await fetch(
@@ -42,7 +50,10 @@ export default function CandidateLiveRoom({
   session: CandidateSession;
   onStatus: (session: CandidateSession) => void;
 }) {
+  const recording = session.recording_required === true;
   const [consent, setConsent] = useState(false),
+    [recordingConsent, setRecordingConsent] = useState(false),
+    [cameraLost, setCameraLost] = useState(false),
     [busy, setBusy] = useState(false),
     [ending, setEnding] = useState(false),
     [endPending, setEndPending] = useState(false),
@@ -53,7 +64,8 @@ export default function CandidateLiveRoom({
     [remaining, setRemaining] = useState<number | null>(null);
   const peer = useRef<RTCPeerConnection | null>(null),
     microphone = useRef<MediaStream | null>(null),
-    audio = useRef<HTMLAudioElement | null>(null);
+    audio = useRef<HTMLAudioElement | null>(null),
+    camera = useRef<HTMLVideoElement | null>(null);
   const submitted = useRef(false),
     endRequested = useRef(false),
     alive = useRef(true),
@@ -64,6 +76,7 @@ export default function CandidateLiveRoom({
     peer.current?.close();
     peer.current = null;
     if (audio.current) audio.current.srcObject = null;
+    if (camera.current) camera.current.srcObject = null;
   }
   useEffect(() => {
     alive.current = true;
@@ -103,22 +116,56 @@ export default function CandidateLiveRoom({
     }
   }
   async function start() {
-    if (busy || peer.current || !consent) return;
+    if (busy || peer.current || !consent || (recording && !recordingConsent))
+      return;
     setBusy(true);
-    setMessage("Checking your microphone…");
+    setMessage(
+      recording
+        ? "Checking your microphone and camera…"
+        : "Checking your microphone…"
+    );
     try {
-      const media = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-        video: false,
-      });
+      let media: MediaStream;
+      try {
+        media = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+          video: recording ? cameraConstraints : false,
+        });
+      } catch (error) {
+        if (!recording) throw error;
+        throw new Error(
+          "This interview needs your camera and microphone. Allow access in your browser, check no other app is using your camera, and try again."
+        );
+      }
       if (!alive.current) {
         media.getTracks().forEach((t) => t.stop());
         return;
       }
       microphone.current = media;
+      if (recording) {
+        const video = media.getVideoTracks()[0];
+        if (!video || video.readyState !== "live")
+          throw new Error(
+            "Your camera did not start. Check no other app is using it, then try again."
+          );
+        video.addEventListener("ended", () => {
+          if (!alive.current || endRequested.current) return;
+          setCameraLost(true);
+          setMessage(
+            "Your camera stopped. Keep this tab open and reconnect your camera; the recruiter will see that the video was interrupted."
+          );
+        });
+        if (camera.current) {
+          camera.current.srcObject = new MediaStream([video]);
+          void camera.current.play().catch(() => {});
+        }
+      }
       const connection = new RTCPeerConnection();
       peer.current = connection;
-      media.getTracks().forEach((track) => connection.addTrack(track, media));
+      // The interviewer receives audio only; the camera is used for the recording.
+      media
+        .getAudioTracks()
+        .forEach((track) => connection.addTrack(track, media));
       // The service disables frontend provider commands. This channel is never used to submit evidence.
       connection.createDataChannel("oai-events");
       connection.ontrack = (event) => {
@@ -325,7 +372,8 @@ export default function CandidateLiveRoom({
             <div className={`stage-topbar ${styles.topbar}`}>
               <div>
                 <p className="panel-kicker">
-                  {session.duration_limit_seconds / 60} minute audio interview
+                  {session.duration_limit_seconds / 60} minute{" "}
+                  {recording ? "video" : "audio"} interview
                 </p>
                 <h1 id="stage-title">{session.job_title}</h1>
                 <p className={styles.stageLabel}>{stageTitle}</p>
@@ -384,10 +432,24 @@ export default function CandidateLiveRoom({
                     : "Waiting to connect"
                 }
               />
-              <article className="participant candidate">
-                <div className="candidate-avatar" aria-hidden="true">
-                  You
-                </div>
+              <article
+                className={`participant candidate ${
+                  recording ? styles.candidateVideo : ""
+                }`}
+              >
+                {recording ? (
+                  <video
+                    ref={camera}
+                    className={styles.cameraPreview}
+                    muted
+                    playsInline
+                    aria-label="Your camera preview"
+                  />
+                ) : (
+                  <div className="candidate-avatar" aria-hidden="true">
+                    You
+                  </div>
+                )}
                 <div className="candidate-info">
                   <p className="panel-kicker">Candidate</p>
                   <h2>Your space to shine</h2>
@@ -398,7 +460,9 @@ export default function CandidateLiveRoom({
                       }
                       aria-hidden="true"
                     />
-                    {finishing
+                    {recording && cameraLost && !finishing
+                      ? "Camera stopped"
+                      : finishing
                       ? "Microphone off"
                       : !connected
                       ? "Microphone not connected"
@@ -412,7 +476,8 @@ export default function CandidateLiveRoom({
             {ready ? (
               <div className={styles.preflight}>
                 <p>
-                  When you start, your browser will ask for microphone access.
+                  When you start, your browser will ask for{" "}
+                  {recording ? "camera and microphone" : "microphone"} access.
                   Reloading this page cannot restore a live audio connection.
                 </p>
                 <label className={styles.consent}>
@@ -426,9 +491,23 @@ export default function CandidateLiveRoom({
                   AI-generated assessment being saved and shared with the
                   recruiter for review.
                 </label>
+                {recording && (
+                  <label className={styles.consent}>
+                    <input
+                      type="checkbox"
+                      checked={recordingConsent}
+                      disabled={busy}
+                      onChange={(e) => setRecordingConsent(e.target.checked)}
+                    />
+                    I agree to my camera and microphone being video recorded
+                    for the whole interview, together with the interviewer’s
+                    voice, and to the recording being stored and shared with
+                    the recruiter for review.
+                  </label>
+                )}
                 <button
                   className={`${styles.button} ${styles.primary}`}
-                  disabled={!consent || busy}
+                  disabled={!consent || (recording && !recordingConsent) || busy}
                   onClick={() => void start()}
                 >
                   {busy ? "Preparing your interview…" : "Start interview"}
@@ -473,7 +552,7 @@ export default function CandidateLiveRoom({
               </>
             )}
           </section>
-          <CandidateGuide ready={ready} />
+          <CandidateGuide ready={ready} recording={recording} />
         </div>
       )}
     </div>

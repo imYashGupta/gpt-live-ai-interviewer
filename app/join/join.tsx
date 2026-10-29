@@ -153,8 +153,8 @@ export default function Join() {
               let your experience do the talking.
             </p>
             <div className={styles.welcomeDetails}>
-              <span>Microphone only</span>
-              <span>No camera needed</span>
+              <span>Quiet space</span>
+              <span>Working microphone</span>
               <span>Go at your pace</span>
             </div>
             <button
@@ -176,7 +176,7 @@ export default function Join() {
             </button>
             <p className={styles.message}>
               You’ll review the interview details and give consent before your
-              microphone is used.
+              microphone or camera is used.
             </p>
           </section>
         )}

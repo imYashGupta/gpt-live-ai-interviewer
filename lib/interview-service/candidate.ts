@@ -35,14 +35,16 @@ export async function candidateRow(db: PoolClient, token: string | null, lock: b
   if (!valid.rowCount) throw new ServiceError(401,"invalid_session");
   return found.rows[0];
 }
-function candidateView(row: InterviewRow) {
+function candidateView(service: InterviewService, row: InterviewRow) {
   return { interview_id: row.id, execution_status: row.execution_status, attempt_id: row.attempt_id,
     job_title: row.request.job.title, duration_limit_seconds: row.request.configuration.duration_limit_seconds,
     opens_at: row.request.availability.opens_at, last_start_at: row.request.availability.last_start_at,
-    environment: "test", transport: row.execution_provider === "fake" ? "sandbox" : "webrtc" };
+    environment: "test", transport: row.execution_provider === "fake" ? "sandbox" : "webrtc",
+    // Live interviews need the camera and video recording consent whenever recording storage is configured.
+    recording_required: row.execution_provider !== "fake" && Boolean(service.recording) };
 }
 export async function candidateStatus(service: InterviewService, token: string | null) {
-  return transaction(service.pool, async db => candidateView(await candidateRow(db,token,true)));
+  return transaction(service.pool, async db => candidateView(service,await candidateRow(db,token,true)));
 }
 export async function startCandidate(service: InterviewService, token: string | null, input: { sdp?: string; consent_version?: string } = {}) {
   return transaction(service.pool,async db => {
@@ -55,7 +57,7 @@ export async function startCandidate(service: InterviewService, token: string | 
       if (previous.offer_hash !== hashToken(input.sdp!)) throw new ServiceError(409,"connection_already_started", "This interview has already started in another connection. Return to that tab or end the interview.");
     }
     // Repeated start/reconnect returns the original attempt, even after completion.
-    if (row.attempt_id && ["in_progress","completed","interrupted","failed"].includes(row.execution_status)) return candidateView(row);
+    if (row.attempt_id && ["in_progress","completed","interrupted","failed"].includes(row.execution_status)) return candidateView(service,row);
     if (row.execution_status !== "ready") throw new ServiceError(409,"invalid_state");
     if (live && !service.liveEnabled()) throw new ServiceError(503,"live_pilot_disabled");
     const now = Date.now(), w = row.request.availability;
@@ -80,7 +82,7 @@ export async function startCandidate(service: InterviewService, token: string | 
       resource_version=resource_version+1,updated_at=now() WHERE id=$1 RETURNING *`,[row.id,attempt])).rows[0];
     await db.query("INSERT INTO service_jobs(id,kind,dedupe_key,interview_id) VALUES ($1,'execute',$2,$3)",[newId("job"),`execute:${attempt}`,row.id]);
     await emitEvent(db,updated,"interview.started");
-    return candidateView(updated);
+    return candidateView(service,updated);
   });
 }
 
@@ -89,7 +91,7 @@ export async function candidateConnection(service: InterviewService, token: stri
     const row = await candidateRow(db,token,true);
     if (!row.attempt_id) throw new ServiceError(409,"not_started");
     const attempt = (await db.query("SELECT connection_state,answer_ciphertext,deadline_at FROM service_attempts WHERE id=$1", [row.attempt_id])).rows[0];
-    return { ...candidateView(row), connection_state: attempt.connection_state, deadline_at: attempt.deadline_at.toISOString(),
+    return { ...candidateView(service,row), connection_state: attempt.connection_state, deadline_at: attempt.deadline_at.toISOString(),
       answer: row.execution_status === "in_progress" && attempt.connection_state === "observing" && attempt.answer_ciphertext ? unseal(attempt.answer_ciphertext,service.key) : null };
   });
 }

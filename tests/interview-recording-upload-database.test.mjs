@@ -5,7 +5,7 @@ import { S3Client } from '@aws-sdk/client-s3';
 import { createServicePool, migrateService, transaction } from '../lib/interview-service/postgres.ts';
 import { provisionAccount, authenticate, newId } from '../lib/interview-service/security.ts';
 import { InterviewService } from '../lib/interview-service/service.ts';
-import { exchangeInvitation, startCandidate } from '../lib/interview-service/candidate.ts';
+import { exchangeInvitation, startCandidate, candidateStatus } from '../lib/interview-service/candidate.ts';
 import { RecordingStorage, recordingStorageConfig } from '../lib/interview-service/recording-storage.ts';
 import { startCandidateRecording, candidateChunkUpload, confirmCandidateChunk } from '../lib/interview-service/recordings.ts';
 import { handleCandidate } from '../lib/interview-service/http.ts';
@@ -129,6 +129,17 @@ test('candidate recording uploads on disposable Herd fixtures', {skip:!url}, asy
       const d=await candidate(a); await startCandidateRecording(service,d.token,consent);
       await pool.query('UPDATE service_interviews SET deletion_requested_at=now() WHERE id=$1',[d.interviewId]);
       await assert.rejects(candidateChunkUpload(service,d.token,{sequence:0}),status('invalid_session',401));
+    });
+
+    await t.test('the session says whether the camera is required',async()=>{
+      const c=await candidate(a,false);
+      // Synthetic interviews never record; live ones require it whenever storage is configured.
+      assert.equal((await candidateStatus(service,c.token)).recording_required,false);
+      await pool.query("UPDATE service_interviews SET execution_provider='openai_live' WHERE id=$1",[c.interviewId]);
+      assert.equal((await candidateStatus(service,c.token)).recording_required,true);
+      service.recording=undefined;
+      try { assert.equal((await candidateStatus(service,c.token)).recording_required,false); }
+      finally { service.recording=recording; }
     });
 
     await t.test('HTTP routes enforce origin, JSON and the session cookie',async()=>{

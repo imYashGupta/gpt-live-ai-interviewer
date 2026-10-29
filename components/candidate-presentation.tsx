@@ -17,7 +17,13 @@ export function CandidateHeader({ children }: { children?: ReactNode }) {
   );
 }
 
-export function CandidateGuide({ ready }: { ready: boolean }) {
+export function CandidateGuide({
+  ready,
+  recording,
+}: {
+  ready: boolean;
+  recording: boolean;
+}) {
   return (
     <aside className={styles.guide} aria-label="Interview guide">
       <p className="panel-kicker">A little guidance</p>
@@ -30,6 +36,8 @@ export function CandidateGuide({ ready }: { ready: boolean }) {
           <p>
             Use headphones if you can, and keep this tab open throughout your
             interview.
+            {recording &&
+              " Sit facing your camera in good light, and keep your face in view."}
           </p>
         </li>
         <li>
@@ -46,14 +54,31 @@ export function CandidateGuide({ ready }: { ready: boolean }) {
       </ol>
       <div className={styles.privacy}>
         <p className="panel-kicker">Your conversation</p>
-        <p>
-          Your audio is processed live. A transcript and an AI-generated
-          assessment are saved for the recruiter to review.
-        </p>
-        <p>
-          No audio recording is stored by this application. Live captions are
-          not available in this room.
-        </p>
+        {recording ? (
+          <>
+            <p>
+              Your camera and microphone are video recorded for the whole
+              interview, together with the interviewer’s voice. The recording,
+              a transcript and an AI-generated assessment are saved for the
+              recruiter to review.
+            </p>
+            <p>
+              The interviewer hears your audio only. Live captions are not
+              available in this room.
+            </p>
+          </>
+        ) : (
+          <>
+            <p>
+              Your audio is processed live. A transcript and an AI-generated
+              assessment are saved for the recruiter to review.
+            </p>
+            <p>
+              No audio recording is stored by this application. Live captions
+              are not available in this room.
+            </p>
+          </>
+        )}
       </div>
     </aside>
   );

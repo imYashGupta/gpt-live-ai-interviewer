@@ -403,3 +403,16 @@
     margin-top: 28px;
   }
 }
+/* Three classes to outrank the shared .participant.candidate grid. */
+:global(.participant.candidate).candidateVideo {
+  grid-template-columns: 112px 1fr auto;
+}
+.cameraPreview {
+  width: 112px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #1f2b26;
+  /* Mirror the preview so it reads like a mirror; the recording itself is not mirrored. */
+  transform: scaleX(-1);
+}

@@ -7,9 +7,9 @@ import Database from 'better-sqlite3';
 import { importLegacy } from '../lib/interview-service/legacy.ts';
 import { randomBytes } from 'node:crypto';
 import { createServicePool, migrateService, transaction } from '../lib/interview-service/postgres.ts';
-import { provisionAccount, authenticate, hashToken, newId, newToken } from '../lib/interview-service/security.ts';
+import { provisionAccount, authenticate, hashToken, newId, newToken, unseal } from '../lib/interview-service/security.ts';
 import { InterviewService } from '../lib/interview-service/service.ts';
-import { createClient, clientUsage, renameClient } from '../lib/interview-service/clients.ts';
+import { createClient, clientUsage, renameClient, registerWebhook, WEBHOOK_EVENTS } from '../lib/interview-service/clients.ts';
 import { handleApi, handleCandidate } from '../lib/interview-service/http.ts';
 import { exchangeInvitation, startCandidate } from '../lib/interview-service/candidate.ts';
 import { claimJob, runClaimedJob, runWorkerOnce, expireInvitations } from '../lib/interview-service/worker.ts';
@@ -148,6 +148,17 @@ test('PostgreSQL service integration on configured server', {skip:!connection}, 
       await renameClient(pool,staging.accountId,'recooty_stage');
       assert.ok((await clientUsage(pool)).some(r=>r.client==='recooty_stage'));
       assert.equal((await clientUsage(pool,'2000-01')).find(r=>r.client==='recooty_stage').interviews_month,0);
+    });
+    await t.test('operator-registered webhooks are active at once and rotate their secret on rerun',async()=>{
+      const client=await transaction(pool,db=>createClient(db,'recooty_hooks'));
+      const url='http://recooty.test/api/interview-service/webhook';
+      const first=await transaction(pool,db=>registerWebhook(db,client.accountId,url,encryptionKey));
+      const second=await transaction(pool,db=>registerWebhook(db,client.accountId,url,encryptionKey));
+      assert.equal(second.id,first.id); assert.notEqual(second.secret,first.secret); assert.match(second.secret,/^whsec_/);
+      const row=(await pool.query('SELECT status,event_types,secret_ciphertext FROM service_webhook_endpoints WHERE id=$1',[first.id])).rows[0];
+      assert.equal(row.status,'active'); assert.deepEqual(row.event_types,WEBHOOK_EVENTS);
+      assert.equal(unseal(row.secret_ciphertext,encryptionKey),second.secret);
+      await assert.rejects(transaction(pool,db=>registerWebhook(db,client.accountId,'ftp://recooty.test/hook',encryptionKey)));
     });
     await t.test('future/expired windows cannot start or mint usable links',async()=>{
       const input=request(); input.availability.opens_at=new Date(Date.now()+60000).toISOString();

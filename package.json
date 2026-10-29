@@ -11,6 +11,7 @@
     "test:contracts": "node --test tests/interview-service-contract.test.mjs tests/interview-provider.test.mjs",
     "service:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs migrate",
     "service:provision": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs provision",
+    "service:webhook": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs webhook",
     "service:clients": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs clients",
     "service:rename": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs rename",
     "service:credential": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs credential",

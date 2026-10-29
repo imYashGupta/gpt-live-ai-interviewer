@@ -33,9 +33,10 @@ export default function CandidateCall({
   onMute: () => void;
   onEnd: () => void;
 }) {
-  const level = useAudioLevel(finishing ? null : remote);
-  const speaking = level > 0.06;
-  const status = finishing ? "Ending…" : connecting ? "Connecting…" : speaking ? "Speaking" : "AI interviewer";
+  const level = useAudioLevel(finishing ? null : remote, 0.06);
+  // Only transitions worth announcing get words; the background shows when the interviewer is talking.
+  const status = finishing ? "Ending…" : connecting ? "Connecting…" : "";
+  const live = !connecting && !finishing;
   return (
     <main className={styles.call}>
       <header className={styles.callTop}>
@@ -54,11 +55,13 @@ export default function CandidateCall({
             {notice.action && <button onClick={notice.action.run}>{notice.action.label}</button>}
           </div>
         )}
+        <div
+          className={styles.aura}
+          aria-hidden="true"
+          style={{ opacity: live ? 0.35 + Math.min(1, level * 2.5) * 0.65 : 0.15 }}
+        />
         <div className={styles.speaker}>
-          <div
-            className={styles.orb}
-            style={{ boxShadow: `0 0 0 ${Math.round(4 + Math.min(level, 1) * 18)}px rgba(138, 180, 248, ${speaking ? 0.3 : 0.12})` }}
-          >
+          <div className={styles.orb}>
             <Icon name="spark" size={48} />
           </div>
           <span className={styles.speakerName} aria-live="polite">

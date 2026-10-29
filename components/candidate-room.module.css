@@ -321,7 +321,29 @@
   overflow: hidden;
   min-height: 320px;
 }
+/* Soft moving colour behind the interviewer; brighter while it speaks. */
+.aura {
+  position: absolute;
+  inset: -20%;
+  background:
+    radial-gradient(circle at 30% 35%, rgba(66, 133, 244, 0.55), transparent 45%),
+    radial-gradient(circle at 70% 60%, rgba(161, 66, 244, 0.42), transparent 45%),
+    radial-gradient(circle at 45% 85%, rgba(26, 188, 156, 0.28), transparent 50%);
+  filter: blur(40px);
+  transition: opacity 450ms ease-out;
+  animation: drift 18s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+@keyframes drift {
+  from {
+    transform: translate(-4%, -3%) rotate(0deg) scale(1);
+  }
+  to {
+    transform: translate(4%, 3%) rotate(12deg) scale(1.08);
+  }
+}
 .speaker {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 34px;
@@ -330,11 +352,10 @@
   width: 132px;
   height: 132px;
   border-radius: 50%;
-  background: #8ab4f8;
-  color: #202124;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a73e8;
   display: grid;
   place-items: center;
-  transition: box-shadow 120ms linear;
 }
 .speakerName {
   font-size: 15px;
@@ -429,8 +450,7 @@
   cursor: not-allowed;
 }
 .icon {
-  width: 22px;
-  height: 22px;
+  flex-shrink: 0;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -483,7 +503,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .orb {
+  .aura {
+    animation: none;
     transition: none;
   }
 }

@@ -55,8 +55,11 @@ export function SelfView({ stream, placeholder }: { stream: MediaStream | null; 
   return hasVideo ? <video ref={video} autoPlay muted playsInline aria-label="Your camera" /> : <>{placeholder}</>;
 }
 
-/** Loudness of a stream from 0 to 1, sampled about 15 times a second. */
-export function useAudioLevel(stream: MediaStream | null) {
+/**
+ * Loudness of a stream from 0 to 1, sampled about 15 times a second. `release` below 1 lets the value fall slowly after
+ * speech stops, so visuals driven by it glide instead of flickering between words.
+ */
+export function useAudioLevel(stream: MediaStream | null, release = 1) {
   const [level, setLevel] = useState(0);
   useEffect(() => {
     if (!stream?.getAudioTracks().length) return;
@@ -67,6 +70,7 @@ export function useAudioLevel(stream: MediaStream | null) {
     const samples = new Uint8Array(analyser.fftSize);
     let frame = 0;
     let last = 0;
+    let smoothed = 0;
     const tick = (time: number) => {
       frame = requestAnimationFrame(tick);
       if (time - last < 66) return;
@@ -74,7 +78,9 @@ export function useAudioLevel(stream: MediaStream | null) {
       analyser.getByteTimeDomainData(samples);
       let sum = 0;
       for (const sample of samples) sum += ((sample - 128) / 128) ** 2;
-      setLevel(Math.min(1, Math.sqrt(sum / samples.length) * 4));
+      const current = Math.min(1, Math.sqrt(sum / samples.length) * 4);
+      smoothed = current > smoothed ? current : smoothed + (current - smoothed) * release;
+      setLevel(smoothed);
     };
     void context.resume().catch(() => {});
     frame = requestAnimationFrame(tick);
@@ -83,7 +89,7 @@ export function useAudioLevel(stream: MediaStream | null) {
       setLevel(0);
       void context.close().catch(() => {});
     };
-  }, [stream]);
+  }, [stream, release]);
   return level;
 }
 

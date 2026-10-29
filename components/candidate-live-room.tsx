@@ -9,6 +9,7 @@ import {
   CandidateOrb,
 } from "./candidate-presentation";
 import { InterviewRecorder, type RecorderState } from "./interview-recorder";
+import { IntegrityLog } from "./integrity-log";
 
 export type CandidateSession = {
   job_title: string;
@@ -70,6 +71,7 @@ export default function CandidateLiveRoom({
     audio = useRef<HTMLAudioElement | null>(null),
     camera = useRef<HTMLVideoElement | null>(null),
     recorder = useRef<InterviewRecorder | null>(null),
+    integrity = useRef<IntegrityLog | null>(null),
     remoteStream = useRef<MediaStream | null>(null);
   const submitted = useRef(false),
     endRequested = useRef(false),
@@ -78,6 +80,7 @@ export default function CandidateLiveRoom({
   function release() {
     // Stop the recorder before its tracks so the final chunk is captured; its uploads continue afterwards.
     void recorder.current?.stop();
+    integrity.current?.stop();
     microphone.current?.getTracks().forEach((track) => track.stop());
     microphone.current = null;
     peer.current?.close();
@@ -142,6 +145,7 @@ export default function CandidateLiveRoom({
       if (remoteStream.current) instance.addRemoteAudio(remoteStream.current);
     } catch {
       void instance.stop();
+      integrity.current?.add("recording_unavailable");
       setRecordingProblem(
         "Your video could not be recorded. The interview continues, and the recruiter will see that it was not recorded."
       );
@@ -183,6 +187,7 @@ export default function CandidateLiveRoom({
         video.addEventListener("ended", () => {
           if (!alive.current || endRequested.current) return;
           setCameraLost(true);
+          integrity.current?.add("camera_lost");
           setMessage(
             "Your camera stopped. Keep this tab open and reconnect your camera; the recruiter will see that the video was interrupted."
           );
@@ -246,6 +251,7 @@ export default function CandidateLiveRoom({
           consent_version: "transcript_v1",
         })
       );
+      integrity.current = new IntegrityLog();
       if (recording) await startRecording(media);
       setMessage("Connecting you to the interviewer…");
       const limit = Date.now() + 45000;

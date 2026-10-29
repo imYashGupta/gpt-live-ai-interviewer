@@ -99,7 +99,7 @@ function storage(service: InterviewService) {
   return service.recording;
 }
 /** The candidate's own attempt and its recording, or an error when uploads are no longer accepted. */
-async function candidateAttempt(db: PoolClient, token: string | null) {
+export async function candidateAttempt(db: PoolClient, token: string | null) {
   const row = await candidateRow(db,token,true);
   if (!row.attempt_id || !["in_progress","completed","interrupted"].includes(row.execution_status)) throw new ServiceError(409,"not_started");
   const attempt = (await db.query<{ id: string; ended_at: Date | null; deadline_at: Date }>(

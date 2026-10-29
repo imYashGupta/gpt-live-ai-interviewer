@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Interview Service Core API",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Phase 1 draft core contract. Endpoints are not deployed."
   },
   "servers": [
@@ -751,6 +751,45 @@
               "application/json": {
                 "schema": {
                   "$ref": "./schemas.json#/$defs/ArtifactPage"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Structured error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas.json#/$defs/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/interviews/{id}/integrity": {
+      "get": {
+        "operationId": "getIntegritySummary",
+        "description": "Signals reported by the candidate's browser and recording gaps for the interview's attempt. HTTP 409 not_started before an attempt exists.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "./schemas.json#/$defs/IntegritySummary"
                 }
               }
             }

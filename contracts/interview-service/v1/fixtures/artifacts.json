@@ -1,5 +1,13 @@
 {
   "interview_id": "int_example",
   "workspace_id": "ws_example",
-  "data": []
+  "data": [
+    {
+      "id": "rec_example",
+      "kind": "video_recording",
+      "url": "https://storage.example/interviews/recording.webm?signature=example",
+      "expires_at": "2026-01-01T00:15:00Z",
+      "content_type": "video/webm"
+    }
+  ]
 }

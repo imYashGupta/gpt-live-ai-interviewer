@@ -1484,6 +1484,146 @@
       ],
       "additionalProperties": false
     },
+    "IntegritySummary": {
+      "type": "object",
+      "description": "Browser-reported signals and recording gaps for one attempt. Prompts for human review of the recording, not findings: permission prompts or notifications can produce the same signals.",
+      "properties": {
+        "interview_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "workspace_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "attempt_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$"
+        },
+        "recording": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "recording",
+                    "finalizing",
+                    "ready",
+                    "incomplete",
+                    "failed",
+                    "deleted"
+                  ]
+                },
+                "missing_chunks": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "missing_seconds_estimate": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "status",
+                "missing_chunks",
+                "missing_seconds_estimate"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "recording_unavailable": {
+          "type": "boolean"
+        },
+        "tab_hidden": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "count",
+            "seconds"
+          ],
+          "additionalProperties": false
+        },
+        "focus_lost": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "seconds": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "count",
+            "seconds"
+          ],
+          "additionalProperties": false
+        },
+        "camera_lost": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "events": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tab_hidden",
+                  "tab_visible",
+                  "window_blur",
+                  "window_focus",
+                  "camera_lost",
+                  "recording_unavailable"
+                ]
+              },
+              "offset_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 7200000
+              }
+            },
+            "required": [
+              "type",
+              "offset_ms"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "interview_id",
+        "workspace_id",
+        "attempt_id",
+        "recording",
+        "recording_unavailable",
+        "tab_hidden",
+        "focus_lost",
+        "camera_lost",
+        "events"
+      ],
+      "additionalProperties": false
+    },
     "Deletion": {
       "type": "object",
       "properties": {
@@ -1721,7 +1861,10 @@
             "execution_stopping",
             "provider_outcome_unknown",
             "provider_unavailable",
-            "provider_stop_failed"
+            "provider_stop_failed",
+            "recording_purge_pending",
+            "recording_storage_unavailable",
+            "recording_delete_failed"
           ]
         }
       },

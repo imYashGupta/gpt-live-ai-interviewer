@@ -1,0 +1,38 @@
+{
+  "interview_id": "int_example",
+  "workspace_id": "ws_example",
+  "attempt_id": "att_example",
+  "recording": {
+    "status": "incomplete",
+    "missing_chunks": 1,
+    "missing_seconds_estimate": 10
+  },
+  "recording_unavailable": false,
+  "tab_hidden": {
+    "count": 1,
+    "seconds": 12
+  },
+  "focus_lost": {
+    "count": 2,
+    "seconds": 15
+  },
+  "camera_lost": 0,
+  "events": [
+    {
+      "type": "window_blur",
+      "offset_ms": 61000
+    },
+    {
+      "type": "tab_hidden",
+      "offset_ms": 61200
+    },
+    {
+      "type": "tab_visible",
+      "offset_ms": 73100
+    },
+    {
+      "type": "window_focus",
+      "offset_ms": 73300
+    }
+  ]
+}

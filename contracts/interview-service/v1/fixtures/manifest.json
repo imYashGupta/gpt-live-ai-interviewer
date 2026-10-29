@@ -22,5 +22,6 @@
   "interview-update.json": "UpdateInterviewRequest",
   "usage-adjusted.json": "Event",
   "lifecycle-event.json": "Event",
-  "deletion-status.json": "DeletionStatus"
+  "deletion-status.json": "DeletionStatus",
+  "integrity.json": "IntegritySummary"
 }

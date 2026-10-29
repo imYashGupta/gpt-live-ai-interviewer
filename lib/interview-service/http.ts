@@ -2,8 +2,8 @@ import { type InterviewService } from "./service.ts";
 import { newId, ServiceError } from "./security.ts";
 import { candidateConnection, candidateStatus, exchangeInvitation, startCandidate, stopCandidate } from "./candidate.ts";
 import type { InterviewRequest } from "./validation.ts";
-import { candidateChunkUpload, confirmCandidateChunk, startCandidateRecording } from "./recordings.ts";
-import { recordIntegrityEvents } from "./integrity.ts";
+import { candidateChunkUpload, confirmCandidateChunk, readArtifacts, startCandidateRecording } from "./recordings.ts";
+import { readIntegrity, recordIntegrityEvents } from "./integrity.ts";
 
 const responseHeaders = { "Cache-Control":"no-store", "Referrer-Policy":"no-referrer", "X-Content-Type-Options":"nosniff" };
 function json(body: unknown,status = 200,headers: Record<string,string> = {}) { return Response.json(body,{status,headers:{...responseHeaders,...headers}}); }
@@ -72,13 +72,15 @@ export async function handleApi(request: Request,service: InterviewService) {
     if (method === "POST" && path === "/v1/webhook-endpoints") return json(await service.webhookEndpoint(p,await body(request) as Parameters<InterviewService["webhookEndpoint"]>[1],key),201);
     if (method === "GET" && path === "/v1/usage") return json(await service.usage(p,url.searchParams.get("workspace_id") ?? "",url.searchParams.get("cursor")));
     if (method === "GET" && path === "/v1/balance") return json(await service.balance(p,url.searchParams.get("workspace_id") ?? ""));
-    const match = /^\/v1\/interviews\/([A-Za-z0-9_-]+)(?:\/(access-links|cancel|result|deletion))?$/.exec(path);
+    const match = /^\/v1\/interviews\/([A-Za-z0-9_-]+)(?:\/(access-links|cancel|result|deletion|artifacts|integrity))?$/.exec(path);
     if (match) {
       const [,id,action]=match;
       if (method === "DELETE" && !action) return json(await service.deleteInterview(p,id,key),202);
       if (method === "GET" && action === "deletion") return json(await service.deletionStatus(p,id));
       if (method === "GET" && !action) return json(await service.readInterview(p,id));
       if (method === "GET" && action === "result") return json(await service.readResult(p,id));
+      if (method === "GET" && action === "artifacts") return json(await readArtifacts(service,p,id));
+      if (method === "GET" && action === "integrity") return json(await readIntegrity(service,p,id));
       if (method === "POST" && action === "access-links") return json(await service.accessLink(p,id,await body(request) as {expires_at:string},key),201);
       if (method === "POST" && action === "cancel") return json(await service.cancel(p,id,await body(request) as {expected_resource_version:number;reason:string},key));
     }

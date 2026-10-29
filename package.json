@@ -22,7 +22,7 @@
     "service:replay": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs replay",
     "service:recording-check": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs recording-check",
     "service:worker": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/interview-service.mjs worker",
-    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs tests/interview-deletion-database.test.mjs tests/interview-recording-database.test.mjs tests/interview-recording-upload-database.test.mjs tests/interview-recording-finalize-database.test.mjs tests/interview-integrity-database.test.mjs"
+    "test:database": "INTERVIEW_DATABASE_TEST_REQUIRED=true node --env-file-if-exists=.env --env-file-if-exists=.env.local --test tests/interview-service-database.test.mjs tests/interview-live-database.test.mjs tests/interview-deletion-database.test.mjs tests/interview-recording-database.test.mjs tests/interview-recording-upload-database.test.mjs tests/interview-recording-finalize-database.test.mjs tests/interview-integrity-database.test.mjs tests/interview-recording-api-database.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1159.0",

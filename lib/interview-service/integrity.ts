@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { transaction } from "./postgres.ts";
-import { ServiceError } from "./security.ts";
+import { requireScope, ServiceError, type Principal } from "./security.ts";
+import { validate } from "./validation.ts";
 import type { InterviewService } from "./service.ts";
 import { candidateAttempt, missingChunks, recordingChunks, type RecordingRow } from "./recordings.ts";
 
@@ -81,4 +82,14 @@ export async function integritySummary(db: PoolClient, attemptId: string) {
     camera_lost: events.filter(e => e.type === "camera_lost").length,
     events: events.slice(0,200),
   };
+}
+
+export async function readIntegrity(service: InterviewService, p: Principal, id: string) {
+  requireScope(p,"interviews:read");
+  const row = await service.getInterview(service.pool,p,id);
+  if (!row.attempt_id) throw new ServiceError(409,"not_started");
+  const summary = await transaction(service.pool,db => integritySummary(db,row.attempt_id!));
+  const view = { interview_id: row.id, workspace_id: row.workspace_id, attempt_id: row.attempt_id, ...summary };
+  validate("IntegritySummary",view);
+  return view;
 }

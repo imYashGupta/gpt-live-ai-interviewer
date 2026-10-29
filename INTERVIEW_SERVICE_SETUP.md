@@ -47,7 +47,9 @@ All `/v1` requests use `Authorization: Bearer <service credential>`. All mutatio
 | `GET /v1/usage` | Available; workspace filter and append-only cursor |
 | `GET /v1/balance` | Available; zero-price sandbox returns zero credit balances |
 | `POST /v1/webhook-endpoints` | Available; pending operator verification |
-| Plan creation/read/approval, interview listing/update/deletion, artifacts | Contract declared; implementation pending |
+| `GET /v1/interviews/{id}/artifacts` | Available; `video_recording` with a short-lived playback link once the recording is `ready` or `incomplete` |
+| `GET /v1/interviews/{id}/integrity` | Available (contract 0.2.0); tab, focus and camera signals plus recording gaps for review |
+| Plan creation/read/approval, interview listing/update | Contract declared; implementation pending |
 
 Schemas and example requests live under `contracts/interview-service/v1`. The schema is provider-neutral; unsupported configuration is rejected. Interview creation does not send an email. Recooty's integration owns invitations; delivery remains disabled by default.
 
@@ -243,3 +245,10 @@ attempt ends, checked every 30 seconds). The job joins the confirmed chunks into
 multipart upload and deletes the chunk objects. The recording becomes `ready`, `incomplete` (some chunks missing; the
 file still plays) or `failed` (the first chunk, which holds the video header, never arrived; chunks are kept). Chunk
 rows stay in the database as evidence of gaps. The worker must run with the same `INTERVIEW_RECORDING_*` settings.
+
+Recruiters read recordings through `GET /v1/interviews/{id}/artifacts` (playback links last
+`INTERVIEW_RECORDING_PLAYBACK_TTL_SECONDS`) and review signals through `GET /v1/interviews/{id}/integrity`. Deleting
+an interview removes its signals and chunk records at once; the deletion job then purges its S3 objects, purges again
+after any upload link issued before deletion has expired, and reports `recording_purge_pending`,
+`recording_storage_unavailable` or `recording_delete_failed` as the blocker until done. No automatic retention period
+is applied to recordings yet.

@@ -1,19 +1,20 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "sha256": {
     "fixtures/access-link.json": "6e665d22181975cd60ba38fbdc8fd719bd587970a291764a38b0b09daf1f226f",
-    "fixtures/artifacts.json": "3316667f0b7aab14582dba23550c3967cb007d4235f49762d2801a12250d3bb4",
+    "fixtures/artifacts.json": "933c0e0458ab1a332e4aa0d9408be881dd7e06a4c735e0bcfe68d0d7c21b8b88",
     "fixtures/balance.json": "8b68900428932cb45a946530cbe17784af1b1ba123cdbb0d35a1424525abaf4d",
     "fixtures/capabilities.json": "fa93c47ab648c3044f98d3ce4fd036cb5100e3e66d4cd415399472e6fb03ab90",
     "fixtures/create-interview.json": "fc811c4d6c4da0ffadaee04648536597b703a4bb17058b3a24ab2c1f45a8ab97",
     "fixtures/deletion-status.json": "7f14ec1a346aa9bbc0b7c3bf580993fe0de61c3dea08f8f74b49a8ebca84b829",
     "fixtures/deletion.json": "a1fcba32554a5e7cb5fd6ec23a41a5cc78cdd7b0117776383193e2c083e692b3",
     "fixtures/error.json": "9df1f099f382257f2bb338bef55eb950611ae24f4a83e3b7cdcacc489f37da26",
+    "fixtures/integrity.json": "3892395948d49f18ff910c21c58dde112022d2df9906390c7604b228a1bfc3e7",
     "fixtures/interview-page.json": "706b72c17a0a578fe145b22bcc5e0d6adbea3dffe81d5a6d6f625fbed6c0e65d",
     "fixtures/interview-update.json": "ec5a8546d55459fc56287474414ccc9c5bcb12813784e26b202cbb98a565f4f4",
     "fixtures/interview.json": "8b12e872da6b00edc469de771b211f4c81e20a943eb4d2bb4310e6db9eac800b",
     "fixtures/lifecycle-event.json": "50903b7c9b6bbd135807e8f3388b2421a2a62a138aa0064501d572db08518054",
-    "fixtures/manifest.json": "bc8ab63b6e5657d86ddf6be58dcc991e09d9d15e0fdff2bea884839ef3cf3dc4",
+    "fixtures/manifest.json": "93ecaa4c585e5f01087d3564eb431a1a044e1f4114694d8c7221f4f651a1cdc2",
     "fixtures/plan-request.json": "2be9f7a714275086ea21c68df5c2897b98a162781ee390db4345ab8e1159a702",
     "fixtures/plan-update.json": "5512bd16e42ecdc2685b553bb2a15ddd7d25b403b09b37a5c4b817e69cb04ea5",
     "fixtures/plan.json": "5f1330b9148b055e1ff7f87b025f1f7214e99aa0a88d01ba515594bf4433cda2",
@@ -27,7 +28,7 @@
     "fixtures/webhook-request.json": "528e72458cd6b249f6e0340d5c3ab022358fbdc3359a471313807471d4cefcb4",
     "fixtures/workspace-request.json": "d3af4bc9be10aee4162f4df7f501c567e6569ab8823b24ad9a4af4eb22d305d4",
     "fixtures/workspace.json": "09dc2589b7d421df67a0192c10d1bf024d179504faf98d88cb6b06fb5e10da8b",
-    "openapi.json": "0a56516b9eef47e4b4624fe7391963b8e993523bdad942a2e74f67539b2f628f",
-    "schemas.json": "a70add2ee0c06168dfa3d477a322d14f3aeca6517a35cae48cba38ba52ad39d0"
+    "openapi.json": "52be7ca542f046b487b04806e5dcdc31c0fff0942634041dd2be14ec18fa9750",
+    "schemas.json": "9cff229054ed43cd84467cc25df31fb7ab4fa8c6c0b8e7471273eddad3f2458d"
   }
 }

@@ -4,6 +4,9 @@ import { hashToken, newId, requireScope, seal, unseal, ServiceError, type Princi
 import { emitEvent, type InterviewRow, type InterviewService } from "./service.ts";
 import { finishJob, ownsLease, type Job } from "./job-leases.ts";
 
+// A presigned chunk upload issued just before deletion can still land until it expires, so the purge repeats after that.
+const uploadLinkSeconds = 3600;
+
 function view(row: InterviewRow) {
   return { interview_id: row.id, workspace_id: row.workspace_id,
     status: row.deleted_at ? "deleted" : "deletion_pending",
@@ -42,6 +45,10 @@ async function eraseCopies(db: PoolClient, row: InterviewRow) {
   await db.query("DELETE FROM service_jobs WHERE event_id IN (SELECT id FROM service_events WHERE interview_id=$1 AND type<>'interview.deleted')",[row.id]);
   await db.query("DELETE FROM service_events WHERE interview_id=$1 AND type<>'interview.deleted'",[row.id]);
   await db.query("UPDATE service_usage SET record=record-'external_reference'-'external_reservation_id' WHERE attempt_id=$1",[row.attempt_id]);
+  // Video objects are purged by the deletion job; the row keeps only its prefix until then.
+  await db.query("DELETE FROM service_integrity_events WHERE attempt_id=$1",[row.attempt_id]);
+  await db.query("DELETE FROM service_recording_chunks WHERE recording_id IN (SELECT id FROM service_recordings WHERE interview_id=$1)",[row.id]);
+  await db.query("UPDATE service_recordings SET status='deleted',object_key=NULL,object_bytes=NULL WHERE interview_id=$1",[row.id]);
 }
 export async function requestDeletion(service: InterviewService, p: Principal, id: string, key: string | null) {
   requireScope(p,"interviews:write");
@@ -72,10 +79,12 @@ export async function deleteInterviewData(service: InterviewService, job: Job) {
     if (!row?.deletion_requested_at || row.deleted_at) { await finishJob(db,job); return null; }
     const attempt = (await db.query("SELECT * FROM service_attempts WHERE interview_id=$1",[row.id])).rows[0];
     const running = (await db.query("SELECT id FROM service_jobs WHERE interview_id=$1 AND kind='execute' AND status='running' AND lease_until>now()",[row.id])).rowCount;
-    return { row,attempt,running };
+    const joining = (await db.query("SELECT id FROM service_jobs WHERE interview_id=$1 AND kind='recording' AND status='running' AND lease_until>now()",[row.id])).rowCount;
+    const recording = (await db.query<{ object_prefix: string; deleted_at: Date | null }>("SELECT object_prefix,deleted_at FROM service_recordings WHERE interview_id=$1",[row.id])).rows[0];
+    return { row,attempt,running,joining,recording };
   });
   if (!snapshot) return;
-  const { row,attempt,running } = snapshot;
+  const { row,attempt,running,joining,recording } = snapshot;
   let blocker: string | null = null;
   if (running) blocker = "execution_stopping";
   else if (attempt && attempt.provider !== "fake" && attempt.connection_state !== "closed") {
@@ -87,6 +96,17 @@ export async function deleteInterviewData(service: InterviewService, job: Job) {
         try { await service.live.provider.hangup(attempt.provider_reference); }
         catch { blocker = "provider_stop_failed"; }
       }
+    }
+  }
+  if (!blocker && recording && !recording.deleted_at) {
+    const storageTtl = service.recording?.config.uploadTtlSeconds ?? uploadLinkSeconds;
+    if (joining) blocker = "recording_purge_pending";
+    else if (!service.recording) blocker = "recording_storage_unavailable";
+    else {
+      try { await service.recording.deletePrefix(recording.object_prefix); }
+      catch { blocker = "recording_delete_failed"; }
+      // Purge again once every upload link issued before deletion has expired.
+      if (!blocker && Date.now() < row.deletion_requested_at!.getTime() + (storageTtl + 30) * 1000) blocker = "recording_purge_pending";
     }
   }
   await transaction(service.pool,async db => {
@@ -103,6 +123,8 @@ export async function deleteInterviewData(service: InterviewService, job: Job) {
     if (!attempt || attempt.connection_state === "queued" || attempt.provider === "fake") {
       await db.query("UPDATE service_reservations SET status='released' WHERE interview_id=$1 AND status='reserved'",[row.id]);
     }
+    await db.query("UPDATE service_recordings SET deleted_at=now() WHERE interview_id=$1",[row.id]);
+    await db.query("UPDATE service_jobs SET status='done',lease_token=NULL,lease_until=NULL,last_error=NULL WHERE interview_id=$1 AND kind='recording'",[row.id]);
     const updated = (await db.query<InterviewRow>("UPDATE service_interviews SET deleted_at=now(),deletion_blocker=NULL,resource_version=resource_version+1,updated_at=now() WHERE id=$1 RETURNING *",[row.id])).rows[0];
     await emitEvent(db,updated,"interview.deleted");
     await finishJob(db,job);

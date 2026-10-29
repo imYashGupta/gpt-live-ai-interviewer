@@ -1,7 +1,8 @@
 import type { PoolClient } from "pg";
 import { attemptPrefix, chunkKey, maxChunkSequence, recordingKey, recordingType, type RecordingType } from "./recording-storage.ts";
 import { finishJob, ownsLease, type Job } from "./job-leases.ts";
-import { newId, ServiceError } from "./security.ts";
+import { newId, requireScope, ServiceError, type Principal } from "./security.ts";
+import { validate } from "./validation.ts";
 import { transaction } from "./postgres.ts";
 import { candidateRow } from "./candidate.ts";
 import type { InterviewService } from "./service.ts";
@@ -220,13 +221,32 @@ export async function finalizeRecording(service: InterviewService, job: Job) {
   }
   const saved = await transaction(service.pool,async db => {
     if (!await ownsLease(db,job)) return false;
-    await db.query("UPDATE service_recordings SET status=$2,object_key=$3,object_bytes=$4,ended_at=now() WHERE id=$1",
+    // Deletion may have been requested while joining; its job purges whatever this one wrote.
+    const deleting = (await db.query("SELECT deletion_requested_at FROM service_interviews WHERE id=$1",[job.interview_id])).rows[0]?.deletion_requested_at;
+    if (!deleting) await db.query("UPDATE service_recordings SET status=$2,object_key=$3,object_bytes=$4,ended_at=now() WHERE id=$1",
       [recording.id,status,objectKey,objectBytes]);
     await finishJob(db,job);
-    return true;
+    return !deleting;
   });
   // The joined file replaces the chunks. Chunk rows stay as evidence of gaps; leftover objects go with deletion.
   if (saved && objectKey) await store.deleteKeys(confirmed.map(c => c.object_key)).catch(() => {
     console.error(`Recording ${recording.id}: chunk cleanup failed; chunks remain until the interview is deleted.`);
   });
+}
+
+/** Recruiter playback: a short-lived link to the joined recording once it is ready or incomplete. */
+export async function readArtifacts(service: InterviewService, p: Principal, id: string) {
+  requireScope(p,"interviews:read");
+  const row = await service.getInterview(service.pool,p,id);
+  const recording = (await service.pool.query<RecordingRow>(`SELECT * FROM service_recordings WHERE interview_id=$1
+    AND status IN ('ready','incomplete') AND object_key IS NOT NULL AND deleted_at IS NULL`,[row.id])).rows[0];
+  const data = [];
+  if (recording && service.recording) {
+    const url = await service.recording.playbackUrl(recording.object_key!);
+    data.push({ id: recording.id, kind: "video_recording", url, content_type: recording.content_type,
+      expires_at: new Date(Date.now() + service.recording.config.playbackTtlSeconds * 1000).toISOString().replace(/\.\d{3}Z$/,"Z") });
+  }
+  const page = { interview_id: row.id, workspace_id: row.workspace_id, data };
+  validate("ArtifactPage",page);
+  return page;
 }

@@ -24,6 +24,7 @@ test('development webhook transport permits only explicitly allowlisted local IP
     const url=`http://127.0.0.1:${address.port}/api/interview-service/webhook`;
     assert.equal((await destination(url,['127.0.0.1'],false)).address,'127.0.0.1');
     await assert.rejects(destination(url,['localhost'],false));
+    assert.equal((await destination(url,[],false)).address,'127.0.0.1');
     await webhookTransport(['127.0.0.1'],false)(url,'{"event":"local"}',{'Interview-Signature':'v1=test'});
     assert.deepEqual(received,{body:'{"event":"local"}',signature:'v1=test'});
   } finally {

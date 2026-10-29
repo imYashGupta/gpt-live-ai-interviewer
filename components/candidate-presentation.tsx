@@ -110,7 +110,13 @@ export function CandidateOrb({ label }: { label: string }) {
   );
 }
 
-export function CandidateClosed({ status }: { status: string }) {
+export function CandidateClosed({
+  status,
+  note,
+}: {
+  status: string;
+  note?: string;
+}) {
   const completed = status === "completed";
   return (
     <section
@@ -131,6 +137,11 @@ export function CandidateClosed({ status }: { status: string }) {
           ? "Your conversation has ended. The recruiter will receive the available transcript and results for review."
           : "The recruiter will receive the final status and any available transcript. Contact them if you need help with next steps."}
       </p>
+      {note && (
+        <p className={styles.notice} role="status" aria-live="polite">
+          {note}
+        </p>
+      )}
       <div className={styles.nextSteps}>
         <strong>
           {completed ? "What happens next?" : "Need another interview?"}

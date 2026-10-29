@@ -8,6 +8,7 @@ import {
   CandidateHeader,
   CandidateOrb,
 } from "./candidate-presentation";
+import { InterviewRecorder, type RecorderState } from "./interview-recorder";
 
 export type CandidateSession = {
   job_title: string;
@@ -54,6 +55,8 @@ export default function CandidateLiveRoom({
   const [consent, setConsent] = useState(false),
     [recordingConsent, setRecordingConsent] = useState(false),
     [cameraLost, setCameraLost] = useState(false),
+    [recorderState, setRecorderState] = useState<RecorderState | null>(null),
+    [recordingProblem, setRecordingProblem] = useState(""),
     [busy, setBusy] = useState(false),
     [ending, setEnding] = useState(false),
     [endPending, setEndPending] = useState(false),
@@ -65,12 +68,16 @@ export default function CandidateLiveRoom({
   const peer = useRef<RTCPeerConnection | null>(null),
     microphone = useRef<MediaStream | null>(null),
     audio = useRef<HTMLAudioElement | null>(null),
-    camera = useRef<HTMLVideoElement | null>(null);
+    camera = useRef<HTMLVideoElement | null>(null),
+    recorder = useRef<InterviewRecorder | null>(null),
+    remoteStream = useRef<MediaStream | null>(null);
   const submitted = useRef(false),
     endRequested = useRef(false),
     alive = useRef(true),
     deadline = useRef<number | null>(null);
   function release() {
+    // Stop the recorder before its tracks so the final chunk is captured; its uploads continue afterwards.
+    void recorder.current?.stop();
     microphone.current?.getTracks().forEach((track) => track.stop());
     microphone.current = null;
     peer.current?.close();
@@ -81,6 +88,7 @@ export default function CandidateLiveRoom({
   useEffect(() => {
     alive.current = true;
     const pagehide = () => {
+      recorder.current?.abandon();
       if (submitted.current)
         void request("/candidate/stop", {}).catch(() => {});
       release();
@@ -98,6 +106,13 @@ export default function CandidateLiveRoom({
       release();
     }
   }, [session.execution_status]);
+  const uploadsPending = (recorderState?.pending ?? 0) > 0;
+  useEffect(() => {
+    if (!uploadsPending) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploadsPending]);
   useEffect(() => {
     const timer = window.setInterval(() => {
       if (deadline.current)
@@ -113,6 +128,23 @@ export default function CandidateLiveRoom({
       setPlaybackBlocked(false);
     } catch {
       setPlaybackBlocked(true);
+    }
+  }
+  /** A recording failure does not stop the interview; the recruiter sees which parts are missing. */
+  async function startRecording(media: MediaStream) {
+    const video = media.getVideoTracks()[0];
+    const instance = new InterviewRecorder(video, media, (state) => {
+      if (alive.current) setRecorderState(state);
+    });
+    try {
+      await instance.start();
+      recorder.current = instance;
+      if (remoteStream.current) instance.addRemoteAudio(remoteStream.current);
+    } catch {
+      void instance.stop();
+      setRecordingProblem(
+        "Your video could not be recorded. The interview continues, and the recruiter will see that it was not recorded."
+      );
     }
   }
   async function start() {
@@ -170,8 +202,10 @@ export default function CandidateLiveRoom({
       connection.createDataChannel("oai-events");
       connection.ontrack = (event) => {
         if (audio.current && !endRequested.current) {
-          audio.current.srcObject =
-            event.streams[0] ?? new MediaStream([event.track]);
+          const stream = event.streams[0] ?? new MediaStream([event.track]);
+          audio.current.srcObject = stream;
+          remoteStream.current = stream;
+          recorder.current?.addRemoteAudio(stream);
           void enableAudio();
         }
       };
@@ -212,6 +246,7 @@ export default function CandidateLiveRoom({
           consent_version: "transcript_v1",
         })
       );
+      if (recording) await startRecording(media);
       setMessage("Connecting you to the interviewer…");
       const limit = Date.now() + 45000;
       while (alive.current && Date.now() < limit) {
@@ -362,7 +397,14 @@ export default function CandidateLiveRoom({
         className="remote-audio"
       />
       {closed ? (
-        <CandidateClosed status={session.execution_status} />
+        <CandidateClosed
+          status={session.execution_status}
+          note={
+            uploadsPending
+              ? "Saving your video recording… Please keep this tab open until this message disappears."
+              : undefined
+          }
+        />
       ) : (
         <div className={`room-layout ${styles.layout}`}>
           <section
@@ -409,6 +451,11 @@ export default function CandidateLiveRoom({
             <p className={styles.notice} role="status" aria-live="polite">
               {message}
             </p>
+            {recordingProblem && active && (
+              <p className={styles.notice} role="alert">
+                {recordingProblem}
+              </p>
+            )}
             {playbackBlocked && active && !finishing && (
               <div className={styles.audioAlert} role="alert">
                 <p>Your browser has paused the interviewer’s audio.</p>

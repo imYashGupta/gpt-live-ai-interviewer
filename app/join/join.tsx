@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import styles from "@/components/candidate-interview.module.css";
+import styles from "@/components/candidate-room.module.css";
 import CandidateLiveRoom, {
   type CandidateSession,
 } from "@/components/candidate-live-room";
-import { CandidateHeader } from "@/components/candidate-presentation";
+import { CandidateTopBar } from "@/components/candidate-presentation";
 
 type Session = CandidateSession;
 export default function Join() {
@@ -33,9 +33,6 @@ export default function Join() {
           setSession((current) =>
             current ? { ...current, execution_status: "ended" } : null
           );
-          setMessage(
-            "This interview session has ended or is no longer available. Contact the recruiter if you need help."
-          );
         }
       } catch {
         /* Keep the last known status; the worker owns completion. */
@@ -50,7 +47,7 @@ export default function Join() {
       body: JSON.stringify(input),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error?.message ?? "Please try again.");
+    if (!res.ok) throw new Error(data.error?.message ?? "Try again.");
     return data;
   }
   async function refresh() {
@@ -59,7 +56,7 @@ export default function Join() {
     if (!res.ok)
       throw new Error(
         data.error?.message ??
-          "Session unavailable. Ask the sender for a new link."
+          "This link no longer works. Ask the recruiter for a new one."
       );
     setSession(data);
     return data;
@@ -70,119 +67,86 @@ export default function Join() {
     try {
       await work();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Please try again.");
+      setMessage(error instanceof Error ? error.message : "Try again.");
     } finally {
       setBusy(false);
     }
   }
+  if (session?.transport === "webrtc")
+    return <CandidateLiveRoom session={session} onStatus={setSession} />;
   return (
-    <main
-      className={
-        session?.transport === "webrtc"
-          ? styles.liveShell
-          : `room-shell ${styles.room}`
-      }
-    >
-      {session?.transport !== "webrtc" && (
-        <CandidateHeader>
-          <span className={styles.eyebrow}>Your interview</span>
-        </CandidateHeader>
-      )}
-      <div
-        className={session?.transport === "webrtc" ? undefined : styles.shell}
-      >
-        {session?.transport === "sandbox" && (
-          <p>
-            This is a synthetic integration test. It does not record your
-            microphone, assess you, or use paid credits.
-          </p>
-        )}
-        {session?.transport === "webrtc" ? (
-          <CandidateLiveRoom session={session} onStatus={setSession} />
-        ) : session ? (
-          <section className={styles.card}>
-            <h2>{session.job_title}</h2>
-            <p>
-              Status:{" "}
-              <strong>{session.execution_status.replaceAll("_", " ")}</strong>
+    <main className={styles.page}>
+      <CandidateTopBar />
+      <div className={styles.center}>
+        {session ? (
+          <section className={`${styles.card} ${styles.narrow}`}>
+            <h1 className={styles.title}>{session.job_title}</h1>
+            <p className={styles.sub}>
+              Synthetic integration test. It doesn’t use your microphone or
+              assess you. Status:{" "}
+              {session.execution_status.replaceAll("_", " ")}.
             </p>
-            <p>
-              Configured duration: {session.duration_limit_seconds / 60} minutes
+            <div className={styles.actions}>
+              {session.execution_status === "ready" && (
+                <button
+                  disabled={busy}
+                  className={`${styles.button} ${styles.primary}`}
+                  onClick={() =>
+                    perform(async () => {
+                      setSession(await action("/candidate/start", {}));
+                    })
+                  }
+                >
+                  Run synthetic test
+                </button>
+              )}
+              <button
+                disabled={busy}
+                className={styles.button}
+                onClick={() => perform(async () => void (await refresh()))}
+              >
+                Refresh status
+              </button>
+            </div>
+          </section>
+        ) : (
+          <section
+            className={`${styles.card} ${styles.narrow}`}
+            aria-labelledby="welcome-title"
+          >
+            <h1 id="welcome-title" className={styles.title}>
+              Your interview
+            </h1>
+            <p className={styles.sub}>
+              Setup takes about two minutes. You’ll check your camera and
+              microphone before the interview starts.
             </p>
-            {session.execution_status === "ready" && (
+            <div className={styles.actions}>
               <button
                 disabled={busy}
                 className={`${styles.button} ${styles.primary}`}
                 onClick={() =>
                   perform(async () => {
-                    setSession(await action("/candidate/start", {}));
-                    setMessage(
-                      "Test queued. Refresh status to check worker progress."
-                    );
+                    if (invitation.current) {
+                      await action("/candidate/exchange", {
+                        token: invitation.current,
+                      });
+                      invitation.current = "";
+                    }
+                    await refresh();
                   })
                 }
               >
-                Run synthetic test
+                {busy ? "Opening…" : "Continue"}
               </button>
-            )}
-            <button
-              disabled={busy}
-              className={styles.button}
-              onClick={() =>
-                perform(async () => {
-                  await refresh();
-                })
-              }
-            >
-              Refresh status
-            </button>
-          </section>
-        ) : (
-          <section
-            className={`${styles.card} ${styles.welcome}`}
-            aria-labelledby="welcome-title"
-          >
-            <p className={styles.eyebrow}>A conversation about you</p>
-            <h1 id="welcome-title">
-              Your next chapter
-              <br />
-              starts with a conversation.
-            </h1>
-            <p>
-              Welcome to your audio interview. Find a quiet spot, settle in, and
-              let your experience do the talking.
-            </p>
-            <div className={styles.welcomeDetails}>
-              <span>Quiet space</span>
-              <span>Working microphone</span>
-              <span>Go at your pace</span>
             </div>
-            <button
-              disabled={busy}
-              className={`${styles.button} ${styles.primary}`}
-              onClick={() =>
-                perform(async () => {
-                  if (invitation.current) {
-                    await action("/candidate/exchange", {
-                      token: invitation.current,
-                    });
-                    invitation.current = "";
-                  }
-                  await refresh();
-                })
-              }
-            >
-              {busy ? "Opening your interview…" : "Continue"}
-            </button>
-            <p className={styles.message}>
-              You’ll review the interview details and give consent before your
-              microphone or camera is used.
-            </p>
           </section>
         )}
-        <p className={styles.message} role="status" aria-live="polite">
-          {busy ? "Please wait…" : message}
-        </p>
+        {message && (
+          <p className={styles.error} role="alert">
+            {message}
+          </p>
+        )}
       </div>
     </main>
   );

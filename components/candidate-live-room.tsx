@@ -1,13 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import styles from "./candidate-interview.module.css";
-import {
-  CandidateClosed,
-  CandidateGuide,
-  CandidateHeader,
-  CandidateOrb,
-} from "./candidate-presentation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import CandidateCall, { type CallNotice } from "./candidate-call";
+import { CandidateDone } from "./candidate-presentation";
+import CandidateSetup from "./candidate-setup";
 import { InterviewRecorder, type RecorderState } from "./interview-recorder";
 import { IntegrityLog } from "./integrity-log";
 
@@ -55,21 +51,23 @@ export default function CandidateLiveRoom({
   const recording = session.recording_required === true;
   const [consent, setConsent] = useState(false),
     [recordingConsent, setRecordingConsent] = useState(false),
+    [media, setMedia] = useState<MediaStream | null>(null),
+    [mediaError, setMediaError] = useState(""),
+    [preparing, setPreparing] = useState(false),
+    [remote, setRemote] = useState<MediaStream | null>(null),
     [cameraLost, setCameraLost] = useState(false),
     [recorderState, setRecorderState] = useState<RecorderState | null>(null),
-    [recordingProblem, setRecordingProblem] = useState(""),
+    [recordingProblem, setRecordingProblem] = useState(false),
     [busy, setBusy] = useState(false),
-    [ending, setEnding] = useState(false),
     [endPending, setEndPending] = useState(false),
     [muted, setMuted] = useState(false),
     [playbackBlocked, setPlaybackBlocked] = useState(false);
-  const [message, setMessage] = useState(""),
+  const [error, setError] = useState(""),
     [connected, setConnected] = useState(false),
     [remaining, setRemaining] = useState<number | null>(null);
   const peer = useRef<RTCPeerConnection | null>(null),
     microphone = useRef<MediaStream | null>(null),
     audio = useRef<HTMLAudioElement | null>(null),
-    camera = useRef<HTMLVideoElement | null>(null),
     recorder = useRef<InterviewRecorder | null>(null),
     integrity = useRef<IntegrityLog | null>(null),
     remoteStream = useRef<MediaStream | null>(null);
@@ -86,7 +84,6 @@ export default function CandidateLiveRoom({
     peer.current?.close();
     peer.current = null;
     if (audio.current) audio.current.srcObject = null;
-    if (camera.current) camera.current.srcObject = null;
   }
   useEffect(() => {
     alive.current = true;
@@ -133,10 +130,56 @@ export default function CandidateLiveRoom({
       setPlaybackBlocked(true);
     }
   }
+  /** Opens the microphone (and camera when recording) for the setup check; the interview reuses the same stream. */
+  async function openDevices() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: recording ? cameraConstraints : false,
+    });
+    if (!alive.current) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("The page closed.");
+    }
+    const video = stream.getVideoTracks()[0];
+    if (recording && (!video || video.readyState !== "live")) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error(
+        "Your camera didn’t start. Check no other app is using it, then try again."
+      );
+    }
+    video?.addEventListener("ended", () => {
+      if (!alive.current || endRequested.current) return;
+      setCameraLost(true);
+      integrity.current?.add("camera_lost");
+    });
+    microphone.current?.getTracks().forEach((track) => track.stop());
+    microphone.current = stream;
+    setMedia(stream);
+    return stream;
+  }
+  const prepareMedia = useCallback(async () => {
+    setPreparing(true);
+    setMediaError("");
+    try {
+      await openDevices();
+    } catch (error) {
+      setMediaError(
+        error instanceof Error && error.message.startsWith("Your camera")
+          ? error.message
+          : recording
+          ? "Allow camera and microphone access in your browser’s address bar, then try again."
+          : "Allow microphone access in your browser’s address bar, then try again."
+      );
+    } finally {
+      if (alive.current) setPreparing(false);
+    }
+    // openDevices only reads refs and the recording flag.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recording]);
   /** A recording failure does not stop the interview; the recruiter sees which parts are missing. */
-  async function startRecording(media: MediaStream) {
-    const video = media.getVideoTracks()[0];
-    const instance = new InterviewRecorder(video, media, (state) => {
+  async function startRecording(stream: MediaStream) {
+    const video = stream.getVideoTracks()[0];
+    const instance = new InterviewRecorder(video, stream, (state) => {
       if (alive.current) setRecorderState(state);
     });
     try {
@@ -146,86 +189,49 @@ export default function CandidateLiveRoom({
     } catch {
       void instance.stop();
       integrity.current?.add("recording_unavailable");
-      setRecordingProblem(
-        "Your video could not be recorded. The interview continues, and the recruiter will see that it was not recorded."
-      );
+      setRecordingProblem(true);
     }
   }
   async function start() {
     if (busy || peer.current || !consent || (recording && !recordingConsent))
       return;
     setBusy(true);
-    setMessage(
-      recording
-        ? "Checking your microphone and camera…"
-        : "Checking your microphone…"
-    );
+    setError("");
     try {
-      let media: MediaStream;
-      try {
-        media = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true },
-          video: recording ? cameraConstraints : false,
-        });
-      } catch (error) {
-        if (!recording) throw error;
-        throw new Error(
-          "This interview needs your camera and microphone. Allow access in your browser, check no other app is using your camera, and try again."
-        );
-      }
-      if (!alive.current) {
-        media.getTracks().forEach((t) => t.stop());
-        return;
-      }
-      microphone.current = media;
-      if (recording) {
-        const video = media.getVideoTracks()[0];
-        if (!video || video.readyState !== "live")
-          throw new Error(
-            "Your camera did not start. Check no other app is using it, then try again."
-          );
-        video.addEventListener("ended", () => {
-          if (!alive.current || endRequested.current) return;
-          setCameraLost(true);
-          integrity.current?.add("camera_lost");
-          setMessage(
-            "Your camera stopped. Keep this tab open and reconnect your camera; the recruiter will see that the video was interrupted."
-          );
-        });
-        if (camera.current) {
-          camera.current.srcObject = new MediaStream([video]);
-          void camera.current.play().catch(() => {});
-        }
-      }
+      const current = microphone.current;
+      const stream =
+        current && current.getTracks().every((track) => track.readyState === "live")
+          ? current
+          : await openDevices().catch(() => {
+              throw new Error(
+                recording
+                  ? "This interview needs your camera and microphone. Allow access in your browser, then try again."
+                  : "This interview needs your microphone. Allow access in your browser, then try again."
+              );
+            });
       const connection = new RTCPeerConnection();
       peer.current = connection;
       // The interviewer receives audio only; the camera is used for the recording.
-      media
+      stream
         .getAudioTracks()
-        .forEach((track) => connection.addTrack(track, media));
+        .forEach((track) => connection.addTrack(track, stream));
       // The service disables frontend provider commands. This channel is never used to submit evidence.
       connection.createDataChannel("oai-events");
       connection.ontrack = (event) => {
         if (audio.current && !endRequested.current) {
-          const stream = event.streams[0] ?? new MediaStream([event.track]);
-          audio.current.srcObject = stream;
-          remoteStream.current = stream;
-          recorder.current?.addRemoteAudio(stream);
+          const remoteAudio = event.streams[0] ?? new MediaStream([event.track]);
+          audio.current.srcObject = remoteAudio;
+          remoteStream.current = remoteAudio;
+          setRemote(remoteAudio);
+          recorder.current?.addRemoteAudio(remoteAudio);
           void enableAudio();
         }
       };
       connection.onconnectionstatechange = () => {
         if (!alive.current || endRequested.current) return;
-        if (connection.connectionState === "connected") {
-          setConnected(true);
-          setMessage("Interview in progress.");
-        }
-        if (["failed", "disconnected"].includes(connection.connectionState)) {
+        if (connection.connectionState === "connected") setConnected(true);
+        if (["failed", "disconnected"].includes(connection.connectionState))
           setConnected(false);
-          setMessage(
-            "Audio connection interrupted. If it does not recover, end the interview and contact the recruiter."
-          );
-        }
       };
       await connection.setLocalDescription(await connection.createOffer());
       await new Promise<void>((resolve) => {
@@ -243,7 +249,7 @@ export default function CandidateLiveRoom({
       });
       if (!alive.current) return;
       const sdp = connection.localDescription?.sdp;
-      if (!sdp) throw new Error("The audio connection could not be prepared.");
+      if (!sdp) throw new Error("The audio connection couldn’t be prepared.");
       submitted.current = true;
       onStatus(
         await request("/candidate/start", {
@@ -252,15 +258,14 @@ export default function CandidateLiveRoom({
         })
       );
       integrity.current = new IntegrityLog();
-      if (recording) await startRecording(media);
-      setMessage("Connecting you to the interviewer…");
+      if (recording) await startRecording(stream);
       const limit = Date.now() + 45000;
       while (alive.current && Date.now() < limit) {
         const state = await request("/candidate/connection");
         onStatus(state);
         if (state.execution_status !== "in_progress")
           throw new Error(
-            "The interview could not continue. Please contact the recruiter."
+            "The interview couldn’t continue. Contact the recruiter."
           );
         if (state.answer) {
           deadline.current = Date.parse(state.deadline_at);
@@ -273,17 +278,18 @@ export default function CandidateLiveRoom({
         await new Promise((resolve) => setTimeout(resolve, 1000));
       }
       throw new Error(
-        "The connection took too long. Please contact the recruiter before trying again."
+        "The connection took too long. Contact the recruiter before trying again."
       );
     } catch (error) {
       release();
+      setMedia(null);
       if (submitted.current)
         void request("/candidate/stop", {}).catch(() => {});
       if (alive.current)
-        setMessage(
+        setError(
           error instanceof Error
             ? error.message
-            : "The interview could not start."
+            : "The interview couldn’t start."
         );
     } finally {
       if (alive.current) setBusy(false);
@@ -298,10 +304,9 @@ export default function CandidateLiveRoom({
     audio.current?.pause();
     endRequested.current = true;
     setEndPending(true);
-    setEnding(true);
     setConnected(false);
     setBusy(true);
-    setMessage("Ending your interview…");
+    setError("");
     try {
       const signal = AbortSignal.timeout(15000);
       await request("/candidate/stop", {}, signal);
@@ -310,304 +315,94 @@ export default function CandidateLiveRoom({
         onStatus(state);
         if (state.execution_status !== "in_progress") {
           submitted.current = false;
-          setMessage(
-            state.execution_status === "completed"
-              ? "Interview ended. Your transcript will be processed for the recruiter."
-              : "The interview has closed. The recruiter will receive its final status and available transcript."
-          );
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
       if (alive.current) throw new Error("End confirmation timed out");
     } catch {
-      if (alive.current)
-        setMessage(
-          "Could not confirm the end request. Your microphone is off. Please retry ending the interview."
+      if (alive.current) {
+        setEndPending(false);
+        setError(
+          "We couldn’t confirm the interview ended. Your microphone is off."
         );
+      }
     } finally {
       release();
-      if (alive.current) {
-        setBusy(false);
-        setEnding(false);
-      }
+      if (alive.current) setBusy(false);
     }
   }
+  function toggleMute() {
+    microphone.current?.getAudioTracks().forEach((track) => {
+      track.enabled = muted;
+    });
+    setMuted(!muted);
+  }
+
   const active = session.execution_status === "in_progress";
   const ready = session.execution_status === "ready";
-  const closed = !active && !ready;
   const finishing = active && endPending;
-  const showTime = active && remaining !== null && !finishing;
-  const status = closed
-    ? "ended"
-    : finishing
-    ? "ending"
-    : busy
-    ? "connecting"
-    : connected
-    ? "connected"
-    : active
-    ? "error"
-    : "idle";
-  const statusLabel = closed
-    ? "Closed"
-    : finishing
-    ? "Ending"
-    : busy
-    ? "Connecting"
-    : connected
-    ? "Connected"
-    : active
-    ? "Connection needed"
-    : "Ready";
-  const stageTitle = ready
-    ? "Before we begin"
-    : finishing
-    ? "Ending your interview…"
-    : remaining === 0
-    ? "Time is up. Finishing…"
-    : remaining !== null && remaining <= 20
-    ? "Wrapping up"
-    : "Your conversation";
+  // One notice at a time, most urgent first; the call screen is otherwise text-free.
+  const notice: CallNotice = !active
+    ? null
+    : error
+    ? { text: error, action: { label: "End interview", run: () => void stop() } }
+    : playbackBlocked && !finishing
+    ? { text: "Your browser paused the interviewer’s audio.", action: { label: "Turn on sound", run: () => void enableAudio() } }
+    : !connected && !busy && !finishing
+    ? remote
+      ? { text: "Connection lost. Reconnecting…" }
+      : { text: "This interview is open in another tab, or the connection was lost. Return to that tab or end the interview.", action: { label: "End interview", run: () => void stop() } }
+    : cameraLost && !finishing
+    ? { text: "Your camera stopped. Reconnect it; the recruiter will see the gap in the video." }
+    : recordingProblem && !finishing
+    ? { text: "Your video isn’t being recorded. The interview continues." }
+    : null;
+
   return (
-    <div className={`room-shell ${styles.room}`}>
-      <CandidateHeader>
-        <span
-          className={`connection-pill ${status} ${styles.status}`}
-          role="status"
-        >
-          <i aria-hidden="true" />
-          {statusLabel}
-        </span>
-        {active && (
-          <button
-            className={`end-button ${styles.endButton}`}
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm("End this interview now?")) void stop();
-            }}
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="7" y="7" width="10" height="10" rx="1" />
-            </svg>
-            {ending ? "Ending…" : "End interview"}
-          </button>
-        )}
-      </CandidateHeader>
-      <audio
-        ref={audio}
-        autoPlay
-        playsInline
-        aria-label="Interviewer audio"
-        className="remote-audio"
-      />
-      {closed ? (
-        <CandidateClosed
+    <>
+      <audio ref={audio} autoPlay playsInline aria-label="Interviewer audio" hidden />
+      {ready ? (
+        <CandidateSetup
+          session={session}
+          recording={recording}
+          consent={consent}
+          onConsent={setConsent}
+          recordingConsent={recordingConsent}
+          onRecordingConsent={setRecordingConsent}
+          media={media}
+          mediaError={mediaError}
+          preparing={preparing}
+          onPrepareMedia={prepareMedia}
+          busy={busy}
+          error={error}
+          onStart={() => void start()}
+        />
+      ) : active ? (
+        <CandidateCall
+          media={media}
+          remote={remote}
+          recording={recording && Boolean(recorderState) && recorderState?.status === "recording"}
+          remaining={remaining}
+          connecting={busy && !finishing}
+          finishing={finishing}
+          muted={muted}
+          notice={notice}
+          onMute={toggleMute}
+          onEnd={() => {
+            if (window.confirm("End this interview now?")) void stop();
+          }}
+        />
+      ) : (
+        <CandidateDone
           status={session.execution_status}
           note={
             uploadsPending
-              ? "Saving your video recording… Please keep this tab open until this message disappears."
+              ? "Saving your video recording… Keep this tab open until this message disappears."
               : undefined
           }
         />
-      ) : (
-        <div className={`room-layout ${styles.layout}`}>
-          <section
-            className={`conversation-stage ${styles.stage}`}
-            aria-labelledby="stage-title"
-          >
-            <div className={`stage-topbar ${styles.topbar}`}>
-              <div>
-                <p className="panel-kicker">
-                  {session.duration_limit_seconds / 60} minute{" "}
-                  {recording ? "video" : "audio"} interview
-                </p>
-                <h1 id="stage-title">{session.job_title}</h1>
-                <p className={styles.stageLabel}>{stageTitle}</p>
-              </div>
-              {showTime && (
-                <div
-                  className={`timer ${styles.timer}`}
-                  aria-label="Time remaining"
-                >
-                  <span>
-                    {Math.floor(remaining / 60)}:
-                    {String(remaining % 60).padStart(2, "0")}
-                  </span>
-                  <small>remaining</small>
-                </div>
-              )}
-            </div>
-            {showTime && (
-              <div className="progress-track" aria-hidden="true">
-                <span
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.max(
-                        0,
-                        (1 - remaining / session.duration_limit_seconds) * 100
-                      )
-                    )}%`,
-                  }}
-                />
-              </div>
-            )}
-            <p className={styles.notice} role="status" aria-live="polite">
-              {message}
-            </p>
-            {recordingProblem && active && (
-              <p className={styles.notice} role="alert">
-                {recordingProblem}
-              </p>
-            )}
-            {playbackBlocked && active && !finishing && (
-              <div className={styles.audioAlert} role="alert">
-                <p>Your browser has paused the interviewer’s audio.</p>
-                <button
-                  className={styles.button}
-                  onClick={() => void enableAudio()}
-                >
-                  Enable sound
-                </button>
-              </div>
-            )}
-            <div className="participants">
-              <CandidateOrb
-                label={
-                  finishing
-                    ? "Wrapping up…"
-                    : busy
-                    ? "Preparing the room…"
-                    : connected
-                    ? "Audio connected"
-                    : "Waiting to connect"
-                }
-              />
-              <article
-                className={`participant candidate ${
-                  recording ? styles.candidateVideo : ""
-                }`}
-              >
-                {recording ? (
-                  <video
-                    ref={camera}
-                    className={styles.cameraPreview}
-                    muted
-                    playsInline
-                    aria-label="Your camera preview"
-                  />
-                ) : (
-                  <div className="candidate-avatar" aria-hidden="true">
-                    You
-                  </div>
-                )}
-                <div className="candidate-info">
-                  <p className="panel-kicker">Candidate</p>
-                  <h2>Your space to shine</h2>
-                  <span>
-                    <i
-                      className={
-                        !connected || muted || finishing ? "muted" : ""
-                      }
-                      aria-hidden="true"
-                    />
-                    {recording && cameraLost && !finishing
-                      ? "Camera stopped"
-                      : finishing
-                      ? "Microphone off"
-                      : !connected
-                      ? "Microphone not connected"
-                      : muted
-                      ? "Microphone muted"
-                      : "Microphone on"}
-                  </span>
-                </div>
-              </article>
-            </div>
-            {ready ? (
-              <div className={styles.preflight}>
-                <p>
-                  When you start, your browser will ask for{" "}
-                  {recording ? "camera and microphone" : "microphone"} access.
-                  Reloading this page cannot restore a live audio connection.
-                </p>
-                <label className={styles.consent}>
-                  <input
-                    type="checkbox"
-                    checked={consent}
-                    disabled={busy}
-                    onChange={(e) => setConsent(e.target.checked)}
-                  />
-                  I agree to live audio processing and to a transcript and
-                  AI-generated assessment being saved and shared with the
-                  recruiter for review.
-                </label>
-                {recording && (
-                  <label className={styles.consent}>
-                    <input
-                      type="checkbox"
-                      checked={recordingConsent}
-                      disabled={busy}
-                      onChange={(e) => setRecordingConsent(e.target.checked)}
-                    />
-                    I agree to my camera and microphone being video recorded
-                    for the whole interview, together with the interviewer’s
-                    voice, and to the recording being stored and shared with
-                    the recruiter for review.
-                  </label>
-                )}
-                <button
-                  className={`${styles.button} ${styles.primary}`}
-                  disabled={!consent || (recording && !recordingConsent) || busy}
-                  onClick={() => void start()}
-                >
-                  {busy ? "Preparing your interview…" : "Start interview"}
-                </button>
-              </div>
-            ) : (
-              <>
-                {!connected && !busy && !finishing && (
-                  <p className={styles.notice}>
-                    If this interview is open in another tab, return there.
-                    Otherwise, end it and contact the recruiter. Reloading
-                    cannot restore the audio connection.
-                  </p>
-                )}
-                <div className="room-controls">
-                  <button
-                    className={`control-button ${muted ? "active" : ""} ${
-                      styles.muteButton
-                    }`}
-                    disabled={!connected || busy || finishing}
-                    aria-pressed={muted}
-                    onClick={() => {
-                      microphone.current?.getAudioTracks().forEach((track) => {
-                        track.enabled = muted;
-                      });
-                      setMuted(!muted);
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <rect x="9" y="3" width="6" height="11" rx="3" />
-                      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6" />
-                      {muted && <path d="m3 3 18 18" />}
-                    </svg>
-                    {muted ? "Unmute microphone" : "Mute microphone"}
-                  </button>
-                  <p>
-                    {finishing
-                      ? "Your microphone is off while we confirm the end."
-                      : "Speak naturally — pauses and interruptions are welcome."}
-                  </p>
-                </div>
-              </>
-            )}
-          </section>
-          <CandidateGuide ready={ready} recording={recording} />
-        </div>
       )}
-    </div>
+    </>
   );
 }

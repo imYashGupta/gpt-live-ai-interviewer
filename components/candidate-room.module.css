@@ -1,0 +1,476 @@
+/* Candidate interview room: light setup screens, a dark call screen modelled on video-call apps. */
+.page,
+.call {
+  --blue: #1a73e8;
+  --blue-hover: #1765cc;
+  --ink: #202124;
+  --ink-soft: #5f6368;
+  --line: #dadce0;
+  --tile: #3c4043;
+  --danger: #ea4335;
+  --success: #1e8e3e;
+}
+.page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #f8f9fa;
+  color: var(--ink);
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.brandMark {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--blue);
+  display: grid;
+  place-items: center;
+  color: white;
+}
+.center {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.card {
+  width: min(100%, 880px);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 32px;
+}
+.narrow {
+  width: min(100%, 480px);
+  text-align: center;
+}
+.title {
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.25;
+  margin: 0 0 8px;
+}
+.sub {
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin: 0;
+}
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.stepBar {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.stepBar[data-done="true"] {
+  background: var(--blue);
+}
+.stepLabel {
+  margin-left: 8px;
+}
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 32px;
+  align-items: center;
+}
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 0;
+  display: grid;
+  gap: 16px;
+}
+.listItem {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.listIcon {
+  flex: 0 0 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e8f0fe;
+  color: var(--blue);
+  display: grid;
+  place-items: center;
+}
+.listItem small {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+.check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.55;
+  cursor: pointer;
+  margin-top: 12px;
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--blue);
+  flex: 0 0 auto;
+}
+.check[data-checked="true"] {
+  border-color: var(--blue);
+  background: #f4f8fe;
+}
+.preview {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: var(--tile);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  color: #bdc1c6;
+}
+.preview video,
+.selfTile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Mirrored like a mirror; the recording itself is not mirrored. */
+  transform: scaleX(-1);
+}
+.previewLabel {
+  font-size: 13px;
+}
+.status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  margin-top: 14px;
+}
+.ok {
+  color: var(--success);
+}
+.bad {
+  color: var(--danger);
+}
+.meter {
+  display: flex;
+  gap: 4px;
+  margin: 8px 0 0 30px;
+}
+.meter span {
+  width: 14px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.meter span[data-on="true"] {
+  background: var(--success);
+}
+.actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 28px;
+  flex-wrap: wrap;
+}
+.narrow .actions,
+.join .actions {
+  justify-content: center;
+}
+.button {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 10px 22px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.button:hover {
+  background: #f4f8fe;
+}
+.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: white;
+}
+.primary:hover {
+  background: var(--blue-hover);
+}
+.button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.button:focus-visible,
+.callButton:focus-visible,
+.check input:focus-visible {
+  outline: 3px solid #8ab4f8;
+  outline-offset: 2px;
+}
+.error {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fce8e6;
+  color: #a50e0e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.info {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #e8f0fe;
+  color: #174ea6;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.join {
+  text-align: center;
+}
+.joinMeta {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin: 4px 0 0;
+}
+
+/* Call screen */
+.call {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #202124;
+  color: #e8eaed;
+  font-family: var(--font-geist-sans), Arial, sans-serif;
+}
+.callTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.rec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f28b82;
+  font-size: 13px;
+}
+.rec i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+.stage {
+  position: relative;
+  flex: 1;
+  margin: 0 16px;
+  border-radius: 16px;
+  background: #2d2e31;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  min-height: 320px;
+}
+.speaker {
+  display: grid;
+  justify-items: center;
+  gap: 34px;
+}
+.orb {
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  background: #8ab4f8;
+  color: #202124;
+  display: grid;
+  place-items: center;
+  transition: box-shadow 120ms linear;
+}
+.speakerName {
+  font-size: 15px;
+  color: #bdc1c6;
+}
+.selfTile {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: clamp(140px, 22vw, 240px);
+  aspect-ratio: 4 / 3;
+  border-radius: 12px;
+  background: var(--tile);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.selfName {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #5f6368;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+}
+.notice {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #3c4043;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.notice button {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: #8ab4f8;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.controls {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px;
+}
+.callButton {
+  appearance: none;
+  border: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--tile);
+  color: #e8eaed;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.callButton[aria-pressed="true"] {
+  background: var(--danger);
+  color: white;
+}
+.hangup {
+  width: 72px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: white;
+}
+.callButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.icon {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.done {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  margin: 0 auto 16px;
+  display: grid;
+  place-items: center;
+  background: #e6f4ea;
+  color: var(--success);
+}
+.closed {
+  background: #f1f3f4;
+  color: var(--ink-soft);
+}
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .card {
+    padding: 22px;
+  }
+  .split {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .title {
+    font-size: 22px;
+  }
+  .topbar,
+  .callTop {
+    padding: 12px 16px;
+  }
+  .stage {
+    margin: 0 8px;
+  }
+  .orb {
+    width: 104px;
+    height: 104px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb {
+    transition: none;
+  }
+}
